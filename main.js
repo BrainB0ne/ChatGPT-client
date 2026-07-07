@@ -16,8 +16,8 @@ const REFRESH_BUTTON_SCRIPT = `
   const host = document.createElement('div');
   host.id = hostId;
   host.style.position = 'fixed';
-  host.style.top = '12px';
-  host.style.right = '14px';
+  host.style.bottom = '44px';
+  host.style.right = '24px';
   host.style.zIndex = '2147483647';
 
   const shadow = host.attachShadow({ mode: 'closed' });
