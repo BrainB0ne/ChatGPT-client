@@ -2,6 +2,11 @@
 
 A native Electron desktop wrapper that opens ChatGPT in an app window.
 
+## Features
+
+- Bottom-right refresh button for reloading ChatGPT from inside the app window.
+- F5 reload shortcut.
+
 ## Developer
 
 - Stephan Coertzen `<coertzen.jfs@gmail.com>`
