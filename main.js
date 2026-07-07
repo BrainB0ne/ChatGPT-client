@@ -3,7 +3,7 @@
  * Developer: Stephan Coertzen <coertzen.jfs@gmail.com>
  * License: MIT
  */
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, Menu, shell } = require('electron');
 
 const REFRESH_BUTTON_SCRIPT = `
 (() => {
@@ -97,7 +97,8 @@ function createWindow() {
       preload: require('path').join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      spellcheck: false
     }
   });
 
@@ -111,6 +112,16 @@ function createWindow() {
       event.preventDefault();
       win.webContents.reload();
     }
+  });
+
+  win.webContents.on('context-menu', () => {
+    Menu.buildFromTemplate([
+      { role: 'cut' },
+      { role: 'copy' },
+      { role: 'paste' },
+      { type: 'separator' },
+      { role: 'selectAll' }
+    ]).popup({ window: win });
   });
 
   win.webContents.on('dom-ready', () => {

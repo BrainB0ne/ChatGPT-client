@@ -6,6 +6,8 @@ A native Electron desktop wrapper that opens ChatGPT in an app window.
 
 - Bottom-right refresh button for reloading ChatGPT from inside the app window.
 - F5 reload shortcut.
+- Right-click context menu with cut, copy, paste, and select-all actions.
+- Spell checking is disabled in the app window.
 
 ## Developer
 
