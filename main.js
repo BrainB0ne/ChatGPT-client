@@ -103,6 +103,19 @@ const ACTION_BUTTONS_SCRIPT = `
       .trim();
   }
 
+  function padDatePart(value) {
+    return String(value).padStart(2, '0');
+  }
+
+  function formatLocalTimestamp(date) {
+    return date.getFullYear() + '-' +
+      padDatePart(date.getMonth() + 1) + '-' +
+      padDatePart(date.getDate()) + ' ' +
+      padDatePart(date.getHours()) + ':' +
+      padDatePart(date.getMinutes()) + ':' +
+      padDatePart(date.getSeconds());
+  }
+
   function escapeMarkdownCell(text) {
     return cleanText(text || '')
       .replace(/\\|/g, '\\\\|')
@@ -220,7 +233,7 @@ const ACTION_BUTTONS_SCRIPT = `
     }
 
     const title = cleanText(document.title.replace(/\\s*[-|]\\s*ChatGPT\\s*$/i, '')) || 'ChatGPT conversation';
-    const exportedAt = new Date().toISOString();
+    const exportedAt = formatLocalTimestamp(new Date());
 
     return { title, exportedAt, messages };
   }
@@ -385,6 +398,20 @@ function getDialogParent() {
   return mainWindow && mainWindow.isVisible() ? mainWindow : undefined;
 }
 
+function padDatePart(value) {
+  return String(value).padStart(2, '0');
+}
+
+function getLocalTimestampForFilename() {
+  const date = new Date();
+  return date.getFullYear() + '-' +
+    padDatePart(date.getMonth() + 1) + '-' +
+    padDatePart(date.getDate()) + 'T' +
+    padDatePart(date.getHours()) + '-' +
+    padDatePart(date.getMinutes()) + '-' +
+    padDatePart(date.getSeconds());
+}
+
 async function clearBrowsingData() {
   const { response } = await dialog.showMessageBox(getDialogParent(), {
     type: 'warning',
@@ -428,13 +455,11 @@ async function clearBrowsingData() {
 }
 
 function getMarkdownExportPath() {
-  const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
-  return join(app.getPath('documents'), `chatgpt-export-${timestamp}.md`);
+  return join(app.getPath('documents'), `chatgpt-export-${getLocalTimestampForFilename()}.md`);
 }
 
 function getPdfExportPath() {
-  const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
-  return join(app.getPath('documents'), `chatgpt-export-${timestamp}.pdf`);
+  return join(app.getPath('documents'), `chatgpt-export-${getLocalTimestampForFilename()}.pdf`);
 }
 
 function escapeHtml(value) {
