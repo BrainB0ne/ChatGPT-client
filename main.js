@@ -4,6 +4,7 @@
  * License: MIT
  */
 const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, session, shell } = require('electron');
+const { readFileSync } = require('fs');
 const { mkdir, readFile, writeFile } = require('fs/promises');
 const { join } = require('path');
 
@@ -19,9 +20,20 @@ const DEFAULT_SETTINGS = {
 
 let settings = { ...DEFAULT_SETTINGS };
 
+const ACTION_BUTTON_ICONS = {
+  markdown: readFileSync(join(__dirname, 'build', 'icons', 'markdown.svg'), 'utf8'),
+  pdf: readFileSync(join(__dirname, 'build', 'icons', 'file-type-pdf.svg'), 'utf8'),
+  reload: readFileSync(join(__dirname, 'build', 'icons', 'reload.svg'), 'utf8')
+};
+
 const ACTION_BUTTONS_SCRIPT = `
 (() => {
   const hostId = 'chatgpt-desktop-actions-host';
+  const iconSvgs = {
+    markdown: '__MARKDOWN_ICON__',
+    pdf: '__PDF_ICON__',
+    reload: '__RELOAD_ICON__'
+  };
 
   if (document.getElementById(hostId)) {
     return;
@@ -68,30 +80,21 @@ const ACTION_BUTTONS_SCRIPT = `
     '}'
   ].join('\\n');
 
-  function createIcon(paths) {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('stroke', 'currentColor');
-    svg.setAttribute('stroke-width', '2');
-    svg.setAttribute('stroke-linecap', 'round');
-    svg.setAttribute('stroke-linejoin', 'round');
-
-    for (const d of paths) {
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', d);
-      svg.appendChild(path);
-    }
-
+  function createIcon(svgMarkup) {
+    const template = document.createElement('template');
+    template.innerHTML = svgMarkup.trim();
+    const svg = template.content.firstElementChild;
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
     return svg;
   }
 
-  function createButton(title, label, paths) {
+  function createButton(title, label, svgMarkup) {
     const button = document.createElement('button');
     button.type = 'button';
     button.title = title;
     button.setAttribute('aria-label', label);
-    button.appendChild(createIcon(paths));
+    button.appendChild(createIcon(svgMarkup));
     return button;
   }
 
@@ -277,19 +280,12 @@ const ACTION_BUTTONS_SCRIPT = `
     return '# ' + title + '\\n\\nExported: ' + exportedAt + '\\n\\n' + sections.join('\\n\\n---\\n\\n') + '\\n';
   }
 
-  const refreshButton = createButton('Refresh', 'Refresh ChatGPT', [
-    'M21 12a9 9 0 1 1-2.64-6.36',
-    'M21 3v6h-6'
-  ]);
+  const refreshButton = createButton('Refresh', 'Refresh ChatGPT', iconSvgs.reload);
   refreshButton.addEventListener('click', () => {
     window.location.reload();
   });
 
-  const exportButton = createButton('Export Markdown', 'Export visible chat to Markdown', [
-    'M12 3v12',
-    'M7 10l5 5 5-5',
-    'M5 21h14'
-  ]);
+  const exportButton = createButton('Export Markdown', 'Export visible chat to Markdown', iconSvgs.markdown);
   exportButton.addEventListener('click', async () => {
     try {
       exportButton.disabled = true;
@@ -306,13 +302,7 @@ const ACTION_BUTTONS_SCRIPT = `
     }
   });
 
-  const pdfButton = createButton('Export PDF', 'Export visible chat to PDF', [
-    'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z',
-    'M14 2v6h6',
-    'M9 15h6',
-    'M9 18h6',
-    'M9 12h2'
-  ]);
+  const pdfButton = createButton('Export PDF', 'Export visible chat to PDF', iconSvgs.pdf);
   pdfButton.addEventListener('click', async () => {
     try {
       pdfButton.disabled = true;
@@ -338,8 +328,15 @@ const ACTION_BUTTONS_SCRIPT = `
 })();
 `;
 
+function getActionButtonsScript() {
+  return ACTION_BUTTONS_SCRIPT
+    .replace("'__MARKDOWN_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.markdown))
+    .replace("'__PDF_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.pdf))
+    .replace("'__RELOAD_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.reload));
+}
+
 function injectActionButtons(win) {
-  win.webContents.executeJavaScript(ACTION_BUTTONS_SCRIPT).catch(() => {
+  win.webContents.executeJavaScript(getActionButtonsScript()).catch(() => {
     // The page can briefly reject injection while navigating; the next load retries it.
   });
 }

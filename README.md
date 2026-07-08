@@ -57,3 +57,7 @@ Build outputs are generated in `dist/`:
 - Unpacked app: `win-unpacked/ChatGPT.exe`
 
 Windows builds use `build/icons/icon.ico` for the installer, portable executable, and unpacked `ChatGPT.exe` icon.
+
+## Icon Attribution
+
+Some UI icons are from [Tabler Icons](https://tabler.io/icons), licensed under the MIT License. See [`build/icons/LICENSE-ICONS`](build/icons/LICENSE-ICONS).
