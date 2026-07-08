@@ -1,6 +1,6 @@
 {
   "name": "chatgpt",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Linux-friendly Electron wrapper for ChatGPT",
   "homepage": "https://chatgpt.com",
   "main": "main.js",
@@ -17,7 +17,9 @@
     "start": "electron .",
     "dev": "electron .",
     "build:linux": "electron-builder --linux --publish never",
-    "release:linux": "npm run build:linux"
+    "build:win": "electron-builder --win --publish never",
+    "release:linux": "npm run build:linux",
+    "release:win": "npm run build:win"
   },
   "devDependencies": {
     "electron": "^37.2.0",
@@ -27,7 +29,10 @@
     "appId": "com.local.chatgpt",
     "productName": "ChatGPT",
     "npmRebuild": false,
+    "publish": null,
+    "afterPack": "scripts/after-pack-win.js",
     "files": [
+      "build/icons/**",
       "main.js",
       "preload.js",
       "package.json"
@@ -41,6 +46,14 @@
       "executableName": "chatgpt",
       "maintainer": "Stephan Coertzen <coertzen.jfs@gmail.com>",
       "category": "Utility"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icons/icon.ico",
+      "signAndEditExecutable": false
     }
   }
 }

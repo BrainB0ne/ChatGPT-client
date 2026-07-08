@@ -3,6 +3,8 @@
  * Developer: Stephan Coertzen <coertzen.jfs@gmail.com>
  * License: MIT
  */
-window.addEventListener('DOMContentLoaded', () => {
-  // Intentionally left minimal. Preload exists for future hardening/extensions.
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('chatgptDesktop', {
+  saveMarkdown: markdown => ipcRenderer.invoke('save-markdown-export', markdown)
 });

@@ -3,11 +3,17 @@
  * Developer: Stephan Coertzen <coertzen.jfs@gmail.com>
  * License: MIT
  */
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, session, shell } = require('electron');
+const { writeFile } = require('fs/promises');
+const { join } = require('path');
 
-const REFRESH_BUTTON_SCRIPT = `
+let mainWindow = null;
+let tray = null;
+let isQuitting = false;
+
+const ACTION_BUTTONS_SCRIPT = `
 (() => {
-  const hostId = 'chatgpt-desktop-refresh-host';
+  const hostId = 'chatgpt-desktop-actions-host';
 
   if (document.getElementById(hostId)) {
     return;
@@ -23,6 +29,8 @@ const REFRESH_BUTTON_SCRIPT = `
   const shadow = host.attachShadow({ mode: 'closed' });
   const style = document.createElement('style');
   style.textContent = [
+    ':host { display: block; }',
+    '.actions { display: flex; gap: 8px; }',
     'button {',
     '  align-items: center;',
     '  background: rgba(255, 255, 255, 0.92);',
@@ -37,6 +45,7 @@ const REFRESH_BUTTON_SCRIPT = `
     '  padding: 0;',
     '  width: 36px;',
     '}',
+    'button[disabled] { cursor: progress; opacity: 0.65; }',
     'button:hover { background: #ffffff; }',
     'button:active { transform: translateY(1px); }',
     'button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }',
@@ -51,39 +60,269 @@ const REFRESH_BUTTON_SCRIPT = `
     '}'
   ].join('\\n');
 
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.title = 'Refresh';
-  button.setAttribute('aria-label', 'Refresh ChatGPT');
+  function createIcon(paths) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
 
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
+    for (const d of paths) {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      svg.appendChild(path);
+    }
 
-  for (const d of ['M21 12a9 9 0 1 1-2.64-6.36', 'M21 3v6h-6']) {
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', d);
-    svg.appendChild(path);
+    return svg;
   }
 
-  button.appendChild(svg);
-  button.addEventListener('click', () => {
+  function createButton(title, label, paths) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.title = title;
+    button.setAttribute('aria-label', label);
+    button.appendChild(createIcon(paths));
+    return button;
+  }
+
+  function cleanText(text) {
+    return text
+      .replace(/\\u00a0/g, ' ')
+      .replace(/[ \\t]+\\n/g, '\\n')
+      .replace(/\\n{3,}/g, '\\n\\n')
+      .trim();
+  }
+
+  function textWithCodeBlocks(element) {
+    const clone = element.cloneNode(true);
+
+    for (const removable of clone.querySelectorAll('button, svg, form, textarea, script, style, [contenteditable="true"]')) {
+      removable.remove();
+    }
+
+    for (const pre of clone.querySelectorAll('pre')) {
+      const code = pre.querySelector('code');
+      const language = code?.className?.match(/language-([^\\s]+)/)?.[1] || '';
+      const text = cleanText((code || pre).innerText || '');
+      pre.replaceWith(document.createTextNode('\\n\`\`\`' + language + '\\n' + text + '\\n\`\`\`\\n'));
+    }
+
+    return cleanText(clone.innerText || '');
+  }
+
+  function findRenderedMessages() {
+    const roleNodes = Array.from(document.querySelectorAll('[data-message-author-role]'));
+
+    if (roleNodes.length > 0) {
+      return roleNodes.map(node => ({
+        role: node.getAttribute('data-message-author-role') || 'message',
+        node
+      }));
+    }
+
+    return Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"]')).map((node, index) => ({
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      node
+    }));
+  }
+
+  function buildMarkdown() {
+    const messages = findRenderedMessages()
+      .map(({ role, node }) => {
+        const contentNode = node.querySelector('.markdown, [data-message-id]') || node;
+        return {
+          role: role === 'assistant' ? 'Assistant' : role === 'user' ? 'User' : 'Message',
+          text: textWithCodeBlocks(contentNode)
+        };
+      })
+      .filter(message => message.text);
+
+    if (messages.length === 0) {
+      throw new Error('No rendered ChatGPT messages were found to export.');
+    }
+
+    const title = cleanText(document.title.replace(/\\s*[-|]\\s*ChatGPT\\s*$/i, '')) || 'ChatGPT conversation';
+    const exportedAt = new Date().toISOString();
+    const sections = messages.map(message => '## ' + message.role + '\\n\\n' + message.text);
+
+    return '# ' + title + '\\n\\nExported: ' + exportedAt + '\\n\\n' + sections.join('\\n\\n---\\n\\n') + '\\n';
+  }
+
+  const refreshButton = createButton('Refresh', 'Refresh ChatGPT', [
+    'M21 12a9 9 0 1 1-2.64-6.36',
+    'M21 3v6h-6'
+  ]);
+  refreshButton.addEventListener('click', () => {
     window.location.reload();
   });
 
-  shadow.append(style, button);
+  const exportButton = createButton('Export Markdown', 'Export visible chat to Markdown', [
+    'M12 3v12',
+    'M7 10l5 5 5-5',
+    'M5 21h14'
+  ]);
+  exportButton.addEventListener('click', async () => {
+    try {
+      exportButton.disabled = true;
+
+      if (!window.chatgptDesktop?.saveMarkdown) {
+        throw new Error('Markdown export is not available in this window.');
+      }
+
+      await window.chatgptDesktop.saveMarkdown(buildMarkdown());
+    } catch (error) {
+      window.alert(error.message || 'Failed to export Markdown.');
+    } finally {
+      exportButton.disabled = false;
+    }
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  actions.append(exportButton, refreshButton);
+
+  shadow.append(style, actions);
   document.documentElement.appendChild(host);
 })();
 `;
 
-function injectRefreshButton(win) {
-  win.webContents.executeJavaScript(REFRESH_BUTTON_SCRIPT).catch(() => {
+function injectActionButtons(win) {
+  win.webContents.executeJavaScript(ACTION_BUTTONS_SCRIPT).catch(() => {
     // The page can briefly reject injection while navigating; the next load retries it.
   });
+}
+
+function getTrayIcon() {
+  const iconName = process.platform === 'win32' ? 'icon.ico' : '32x32.png';
+  const icon = nativeImage.createFromPath(join(__dirname, 'build', 'icons', iconName));
+
+  if (process.platform === 'darwin') {
+    icon.setTemplateImage(true);
+  }
+
+  return icon;
+}
+
+function showMainWindow() {
+  if (!mainWindow) {
+    createWindow();
+    return;
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function showAboutDialog() {
+  dialog.showMessageBox(getDialogParent(), {
+    type: 'info',
+    title: 'About ChatGPT',
+    message: 'ChatGPT Desktop Wrapper',
+    detail: `Version ${app.getVersion()}\nhttps://chatgpt.com`,
+    buttons: ['OK']
+  });
+}
+
+function getDialogParent() {
+  return mainWindow && mainWindow.isVisible() ? mainWindow : undefined;
+}
+
+async function clearBrowsingData() {
+  const { response } = await dialog.showMessageBox(getDialogParent(), {
+    type: 'warning',
+    title: 'Clear Browsing Data',
+    message: 'Clear ChatGPT browsing data?',
+    detail: 'This clears cookies, cache, local storage, IndexedDB, and service worker data. You may need to sign in again.',
+    buttons: ['Cancel', 'Clear Browsing Data'],
+    cancelId: 0,
+    defaultId: 0
+  });
+
+  if (response !== 1) {
+    return;
+  }
+
+  const targetSession = mainWindow ? mainWindow.webContents.session : session.defaultSession;
+  await targetSession.clearStorageData({
+    storages: [
+      'cookies',
+      'filesystem',
+      'indexdb',
+      'localstorage',
+      'shadercache',
+      'websql',
+      'serviceworkers',
+      'cachestorage'
+    ]
+  });
+  await targetSession.clearCache();
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.reloadIgnoringCache();
+  }
+
+  await dialog.showMessageBox(getDialogParent(), {
+    type: 'info',
+    title: 'Browsing Data Cleared',
+    message: 'ChatGPT browsing data has been cleared.',
+    buttons: ['OK']
+  });
+}
+
+function getMarkdownExportPath() {
+  const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
+  return join(app.getPath('documents'), `chatgpt-export-${timestamp}.md`);
+}
+
+ipcMain.handle('save-markdown-export', async (_event, markdown) => {
+  if (typeof markdown !== 'string' || markdown.trim().length === 0) {
+    throw new Error('No Markdown content was provided.');
+  }
+
+  const { canceled, filePath } = await dialog.showSaveDialog(getDialogParent(), {
+    title: 'Export ChatGPT Conversation',
+    defaultPath: getMarkdownExportPath(),
+    filters: [
+      { name: 'Markdown', extensions: ['md'] },
+      { name: 'Text Files', extensions: ['txt'] }
+    ]
+  });
+
+  if (canceled || !filePath) {
+    return { canceled: true };
+  }
+
+  await writeFile(filePath, markdown, 'utf8');
+  return { canceled: false, filePath };
+});
+
+function createTray() {
+  if (tray) {
+    return;
+  }
+
+  tray = new Tray(getTrayIcon());
+  tray.setToolTip('ChatGPT');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Show ChatGPT', click: showMainWindow },
+    { label: 'Clear Browsing Data', click: clearBrowsingData },
+    { label: 'About', click: showAboutDialog },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]));
+  tray.on('click', showMainWindow);
 }
 
 function createWindow() {
@@ -94,11 +333,26 @@ function createWindow() {
     minHeight: 640,
     autoHideMenuBar: true,
     webPreferences: {
-      preload: require('path').join(__dirname, 'preload.js'),
+      preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       spellcheck: false
+    }
+  });
+
+  mainWindow = win;
+
+  win.on('close', event => {
+    if (!isQuitting) {
+      event.preventDefault();
+      win.hide();
+    }
+  });
+
+  win.on('closed', () => {
+    if (mainWindow === win) {
+      mainWindow = null;
     }
   });
 
@@ -125,7 +379,7 @@ function createWindow() {
   });
 
   win.webContents.on('dom-ready', () => {
-    injectRefreshButton(win);
+    injectActionButtons(win);
   });
 
   win.loadURL('https://chatgpt.com');
@@ -133,6 +387,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  createTray();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -142,7 +397,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (isQuitting && process.platform !== 'darwin') {
     app.quit();
   }
 });
