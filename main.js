@@ -4,12 +4,20 @@
  * License: MIT
  */
 const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, session, shell } = require('electron');
-const { writeFile } = require('fs/promises');
+const { mkdir, readFile, writeFile } = require('fs/promises');
 const { join } = require('path');
 
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+
+const DEFAULT_SETTINGS = {
+  closeToTray: true,
+  startMinimized: false,
+  alwaysOnTop: false
+};
+
+let settings = { ...DEFAULT_SETTINGS };
 
 const ACTION_BUTTONS_SCRIPT = `
 (() => {
@@ -194,6 +202,53 @@ function injectActionButtons(win) {
   });
 }
 
+function getSettingsPath() {
+  return join(app.getPath('userData'), 'settings.json');
+}
+
+async function loadSettings() {
+  try {
+    const rawSettings = await readFile(getSettingsPath(), 'utf8');
+    const parsedSettings = JSON.parse(rawSettings);
+
+    settings = {
+      ...DEFAULT_SETTINGS,
+      closeToTray: typeof parsedSettings.closeToTray === 'boolean' ? parsedSettings.closeToTray : DEFAULT_SETTINGS.closeToTray,
+      startMinimized: typeof parsedSettings.startMinimized === 'boolean' ? parsedSettings.startMinimized : DEFAULT_SETTINGS.startMinimized,
+      alwaysOnTop: typeof parsedSettings.alwaysOnTop === 'boolean' ? parsedSettings.alwaysOnTop : DEFAULT_SETTINGS.alwaysOnTop
+    };
+  } catch (error) {
+    settings = { ...DEFAULT_SETTINGS };
+  }
+}
+
+async function saveSettings() {
+  await mkdir(app.getPath('userData'), { recursive: true });
+  await writeFile(getSettingsPath(), `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+}
+
+async function updateSetting(key, value) {
+  settings = { ...settings, [key]: value };
+
+  if (key === 'alwaysOnTop' && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setAlwaysOnTop(value);
+  }
+
+  try {
+    await saveSettings();
+  } catch (error) {
+    await dialog.showMessageBox(getDialogParent(), {
+      type: 'error',
+      title: 'Settings Not Saved',
+      message: 'Failed to save settings.',
+      detail: error.message || String(error),
+      buttons: ['OK']
+    });
+  }
+
+  updateTrayMenu();
+}
+
 function getTrayIcon() {
   const iconName = process.platform === 'win32' ? 'icon.ico' : '32x32.png';
   const icon = nativeImage.createFromPath(join(__dirname, 'build', 'icons', iconName));
@@ -207,7 +262,7 @@ function getTrayIcon() {
 
 function showMainWindow() {
   if (!mainWindow) {
-    createWindow();
+    createWindow({ show: true });
     return;
   }
 
@@ -309,8 +364,40 @@ function createTray() {
 
   tray = new Tray(getTrayIcon());
   tray.setToolTip('ChatGPT');
+  updateTrayMenu();
+  tray.on('click', showMainWindow);
+}
+
+function updateTrayMenu() {
+  if (!tray) {
+    return;
+  }
+
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show ChatGPT', click: showMainWindow },
+    {
+      label: 'Settings',
+      submenu: [
+        {
+          label: 'Close to Tray',
+          type: 'checkbox',
+          checked: settings.closeToTray,
+          click: () => updateSetting('closeToTray', !settings.closeToTray)
+        },
+        {
+          label: 'Start Minimized',
+          type: 'checkbox',
+          checked: settings.startMinimized,
+          click: () => updateSetting('startMinimized', !settings.startMinimized)
+        },
+        {
+          label: 'Always on Top',
+          type: 'checkbox',
+          checked: settings.alwaysOnTop,
+          click: () => updateSetting('alwaysOnTop', !settings.alwaysOnTop)
+        }
+      ]
+    },
     { label: 'Clear Browsing Data', click: clearBrowsingData },
     { label: 'About', click: showAboutDialog },
     { type: 'separator' },
@@ -322,16 +409,17 @@ function createTray() {
       }
     }
   ]));
-  tray.on('click', showMainWindow);
 }
 
-function createWindow() {
+function createWindow(options = {}) {
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 980,
     minHeight: 640,
     autoHideMenuBar: true,
+    alwaysOnTop: settings.alwaysOnTop,
+    show: options.show ?? !settings.startMinimized,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -344,10 +432,13 @@ function createWindow() {
   mainWindow = win;
 
   win.on('close', event => {
-    if (!isQuitting) {
+    if (!isQuitting && settings.closeToTray) {
       event.preventDefault();
       win.hide();
+      return;
     }
+
+    isQuitting = true;
   });
 
   win.on('closed', () => {
@@ -385,13 +476,14 @@ function createWindow() {
   win.loadURL('https://chatgpt.com');
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await loadSettings();
   createWindow();
   createTray();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow({ show: true });
     }
   });
 });

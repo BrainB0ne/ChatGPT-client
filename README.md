@@ -10,6 +10,7 @@ A native Electron desktop wrapper that opens ChatGPT in an app window.
 - Right-click context menu with cut, copy, paste, and select-all actions.
 - System tray icon while running; closing the window hides it to the tray.
 - Tray menu with show, clear browsing data, about, and quit actions.
+- Tray settings for close-to-tray, start minimized, and always-on-top behavior.
 - Spell checking is disabled in the app window.
 
 ## Prerequisites (Ubuntu)
