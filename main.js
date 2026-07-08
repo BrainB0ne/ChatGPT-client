@@ -127,6 +127,17 @@ const ACTION_BUTTONS_SCRIPT = `
     return cleanCode.includes(tick) ? tick + tick + ' ' + cleanCode + ' ' + tick + tick : tick + cleanCode + tick;
   }
 
+  function linkToMarkdown(link) {
+    const href = link.href || link.getAttribute('href') || '';
+    const text = cleanText(link.innerText || link.textContent || href);
+
+    if (!href || href.startsWith('javascript:')) {
+      return text;
+    }
+
+    return '[' + (text || href).split(']').join('\\]') + '](' + href.split(')').join('%29') + ')';
+  }
+
   function escapeMarkdownCell(text) {
     return cleanText(text || '')
       .replace(/\\|/g, '\\\\|')
@@ -189,6 +200,10 @@ const ACTION_BUTTONS_SCRIPT = `
       if (!code.closest('pre')) {
         code.replaceWith(document.createTextNode(inlineCodeToMarkdown(code.innerText || '')));
       }
+    }
+
+    for (const link of clone.querySelectorAll('a[href]')) {
+      link.replaceWith(document.createTextNode(linkToMarkdown(link)));
     }
 
     for (const table of clone.querySelectorAll('table')) {
@@ -525,6 +540,7 @@ function isMarkdownTableSeparator(line) {
 
 function renderInlineMarkdown(text) {
   return escapeHtml(text)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
     .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 }
@@ -761,6 +777,11 @@ function buildPdfHtml(conversation) {
     li {
       margin: 0 0 6px;
       padding-left: 2px;
+    }
+    a {
+      color: #1d4ed8;
+      text-decoration: underline;
+      overflow-wrap: anywhere;
     }
     .content-heading {
       color: #111827;
