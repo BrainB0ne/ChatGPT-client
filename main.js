@@ -116,6 +116,17 @@ const ACTION_BUTTONS_SCRIPT = `
       padDatePart(date.getSeconds());
   }
 
+  function inlineCodeToMarkdown(text) {
+    const cleanCode = cleanText(text || '');
+
+    if (!cleanCode) {
+      return '';
+    }
+
+    const tick = String.fromCharCode(96);
+    return cleanCode.includes(tick) ? tick + tick + ' ' + cleanCode + ' ' + tick + tick : tick + cleanCode + tick;
+  }
+
   function escapeMarkdownCell(text) {
     return cleanText(text || '')
       .replace(/\\|/g, '\\\\|')
@@ -172,6 +183,12 @@ const ACTION_BUTTONS_SCRIPT = `
 
     for (const removable of clone.querySelectorAll('button, svg, form, textarea, script, style, [contenteditable="true"]')) {
       removable.remove();
+    }
+
+    for (const code of clone.querySelectorAll('code')) {
+      if (!code.closest('pre')) {
+        code.replaceWith(document.createTextNode(inlineCodeToMarkdown(code.innerText || '')));
+      }
     }
 
     for (const table of clone.querySelectorAll('table')) {
