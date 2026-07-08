@@ -764,17 +764,18 @@ function buildPdfHtml(conversation) {
       background: #fafafa;
     }
     .code-block {
-      background: #111827;
-      border: 1px solid #1f2937;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
       border-radius: 8px;
-      color: #f9fafb;
+      color: #0f172a;
       margin: 0 0 18px;
       overflow: hidden;
       page-break-inside: avoid;
     }
     .code-language {
-      background: #1f2937;
-      color: #d1d5db;
+      background: #e2e8f0;
+      border-bottom: 1px solid #cbd5e1;
+      color: #334155;
       font-family: Consolas, 'Courier New', monospace;
       font-size: 11px;
       padding: 6px 10px;
