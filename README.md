@@ -12,10 +12,6 @@ A native Electron desktop wrapper that opens ChatGPT in an app window.
 - Tray menu with show, clear browsing data, about, and quit actions.
 - Spell checking is disabled in the app window.
 
-## Developer
-
-- Stephan Coertzen `<coertzen.jfs@gmail.com>`
-
 ## Prerequisites (Ubuntu)
 
 ```bash
@@ -59,14 +55,3 @@ Build outputs are generated in `dist/`:
 - Unpacked app: `win-unpacked/ChatGPT.exe`
 
 Windows builds use `build/icons/icon.ico` for the installer, portable executable, and unpacked `ChatGPT.exe` icon.
-
-## GitHub Release Flow
-
-Pushing a version tag (for example `v1.0.1`) triggers automated Linux builds and publishes a GitHub Release with attached artifacts. The release page notes are generated from every commit after `releaseNotes.fromHash` in `package.json`.
-
-```bash
-git add .
-git commit -m "release: v1.0.1"
-git tag v1.0.1
-git push origin main --tags
-```

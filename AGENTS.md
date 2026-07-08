@@ -15,8 +15,3 @@
 - Preserve the BrowserWindow hardening unless intentionally changing security posture: `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true`.
 - `preload.js` exposes only `window.chatgptDesktop.saveMarkdown`; the current UI injection lives in `main.js` via `webContents.executeJavaScript`.
 - Linux and Windows packaging configuration live in `package.json` under `build`; Windows uses `build/icons/icon.ico` and the `afterPack` hook to update the unpacked exe icon.
-
-## Releases
-- `.github/workflows/release.yml` runs only for pushed tags matching `v*`.
-- Release CI uses `npm ci`, `npm run build:linux`, then `node scripts/generate-release-notes.js release-notes.md`.
-- Release notes are generated from commits after `package.json` `releaseNotes.fromHash`; update that hash deliberately when changing the release baseline.
