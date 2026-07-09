@@ -1,8 +1,9 @@
 /*
- * ChatGPT Desktop Wrapper
- * Developer: Stephan Coertzen <coertzen.jfs@gmail.com>
+ * Extended ChatGPT Desktop Client Wrapper (ChatGPT-EX)
+ * Developer: BrainByteZ
  * License: MIT
  */
+
 const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, session, shell } = require('electron');
 const { readFileSync } = require('fs');
 const { mkdir, readFile, writeFile } = require('fs/promises');
@@ -28,7 +29,7 @@ const ACTION_BUTTON_ICONS = {
 
 const ACTION_BUTTONS_SCRIPT = `
 (() => {
-  const hostId = 'chatgpt-desktop-actions-host';
+  const hostId = 'chatgpt-ex-actions-host';
   const iconSvgs = {
     markdown: '__MARKDOWN_ICON__',
     pdf: '__PDF_ICON__',
@@ -416,9 +417,9 @@ function showMainWindow() {
 function showAboutDialog() {
   dialog.showMessageBox(getDialogParent(), {
     type: 'info',
-    title: 'About ChatGPT',
-    message: 'ChatGPT Desktop Wrapper',
-    detail: `Version ${app.getVersion()}\nhttps://chatgpt.com`,
+    title: 'About ChatGPT-EX',
+    message: 'ChatGPT-EX',
+    detail: `Extended ChatGPT Desktop Client Wrapper\nVersion ${app.getVersion()}\nhttps://chatgpt.com`,
     buttons: ['OK']
   });
 }
@@ -445,7 +446,7 @@ async function clearBrowsingData() {
   const { response } = await dialog.showMessageBox(getDialogParent(), {
     type: 'warning',
     title: 'Clear Browsing Data',
-    message: 'Clear ChatGPT browsing data?',
+    message: 'Clear ChatGPT-EX browsing data?',
     detail: 'This clears cookies, cache, local storage, IndexedDB, and service worker data. You may need to sign in again.',
     buttons: ['Cancel', 'Clear Browsing Data'],
     cancelId: 0,
@@ -478,7 +479,7 @@ async function clearBrowsingData() {
   await dialog.showMessageBox(getDialogParent(), {
     type: 'info',
     title: 'Browsing Data Cleared',
-    message: 'ChatGPT browsing data has been cleared.',
+    message: 'ChatGPT-EX browsing data has been cleared.',
     buttons: ['OK']
   });
 }
@@ -935,7 +936,7 @@ function createTray() {
   }
 
   tray = new Tray(getTrayIcon());
-  tray.setToolTip('ChatGPT');
+  tray.setToolTip('ChatGPT-EX');
   updateTrayMenu();
   tray.on('click', showMainWindow);
 }
@@ -946,7 +947,7 @@ function updateTrayMenu() {
   }
 
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Show ChatGPT', click: showMainWindow },
+    { label: 'Show ChatGPT-EX', click: showMainWindow },
     {
       label: 'Settings',
       submenu: [

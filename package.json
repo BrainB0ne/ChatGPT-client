@@ -1,18 +1,14 @@
 {
-  "name": "chatgpt",
+  "name": "chatgpt-ex",
   "version": "1.1.0",
-  "description": "Linux-friendly Electron wrapper for ChatGPT",
+  "description": "Extended desktop wrapper for ChatGPT with Markdown and PDF export",
   "homepage": "https://chatgpt.com",
   "main": "main.js",
   "author": {
-    "name": "Stephan Coertzen",
-    "email": "coertzen.jfs@gmail.com"
+    "name": "BrainByteZ"
   },
   "license": "MIT",
   "private": true,
-  "releaseNotes": {
-    "fromHash": "28cf9a9"
-  },
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
@@ -26,8 +22,8 @@
     "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "com.local.chatgpt",
-    "productName": "ChatGPT",
+    "appId": "eu.brainbytez.chatgpt-ex",
+    "productName": "ChatGPT-EX",
     "npmRebuild": false,
     "publish": null,
     "afterPack": "scripts/after-pack-win.js",
@@ -43,8 +39,8 @@
         "deb"
       ],
       "icon": "build/icons",
-      "executableName": "chatgpt",
-      "maintainer": "Stephan Coertzen <coertzen.jfs@gmail.com>",
+      "executableName": "chatgpt-ex",
+      "maintainer": "BrainByteZ",
       "category": "Utility"
     },
     "win": {

@@ -1,4 +1,4 @@
-# ChatGPT Electron Wrapper
+# Extended ChatGPT Desktop Client Wrapper (ChatGPT-EX)
 
 A native Electron desktop wrapper that opens ChatGPT in an app window.
 
@@ -52,11 +52,11 @@ npm run build:win
 ```
 
 Build outputs are generated in `dist/`:
-- NSIS installer: `ChatGPT Setup <version>.exe`
-- Portable executable: `ChatGPT <version>.exe`
-- Unpacked app: `win-unpacked/ChatGPT.exe`
+- NSIS installer: `ChatGPT-EX Setup <version>.exe`
+- Portable executable: `ChatGPT-EX <version>.exe`
+- Unpacked app: `win-unpacked/ChatGPT-EX.exe`
 
-Windows builds use `build/icons/icon.ico` for the installer, portable executable, and unpacked `ChatGPT.exe` icon.
+Windows builds use `build/icons/icon.ico` for the installer, portable executable, and unpacked `ChatGPT-EX.exe` icon.
 
 ## Icon Attribution
 
