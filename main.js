@@ -24,6 +24,7 @@ let settings = { ...DEFAULT_SETTINGS };
 const ACTION_BUTTON_ICONS = {
   markdown: readFileSync(join(__dirname, 'build', 'icons', 'markdown.svg'), 'utf8'),
   pdf: readFileSync(join(__dirname, 'build', 'icons', 'file-type-pdf.svg'), 'utf8'),
+  print: readFileSync(join(__dirname, 'build', 'icons', 'printer.svg'), 'utf8'),
   reload: readFileSync(join(__dirname, 'build', 'icons', 'reload.svg'), 'utf8')
 };
 
@@ -33,6 +34,7 @@ const ACTION_BUTTONS_SCRIPT = `
   const iconSvgs = {
     markdown: '__MARKDOWN_ICON__',
     pdf: '__PDF_ICON__',
+    print: '__PRINT_ICON__',
     reload: '__RELOAD_ICON__'
   };
 
@@ -320,9 +322,26 @@ const ACTION_BUTTONS_SCRIPT = `
     }
   });
 
+  const printButton = createButton('Print', 'Print visible chat', iconSvgs.print);
+  printButton.addEventListener('click', async () => {
+    try {
+      printButton.disabled = true;
+
+      if (!window.chatgptDesktop?.printConversation) {
+        throw new Error('Print is not available in this window.');
+      }
+
+      await window.chatgptDesktop.printConversation(getConversationExport());
+    } catch (error) {
+      window.alert(error.message || 'Failed to print conversation.');
+    } finally {
+      printButton.disabled = false;
+    }
+  });
+
   const actions = document.createElement('div');
   actions.className = 'actions';
-  actions.append(exportButton, pdfButton, refreshButton);
+  actions.append(exportButton, pdfButton, printButton, refreshButton);
 
   shadow.append(style, actions);
   document.documentElement.appendChild(host);
@@ -333,6 +352,7 @@ function getActionButtonsScript() {
   return ACTION_BUTTONS_SCRIPT
     .replace("'__MARKDOWN_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.markdown))
     .replace("'__PDF_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.pdf))
+    .replace("'__PRINT_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.print))
     .replace("'__RELOAD_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.reload));
 }
 
@@ -927,6 +947,36 @@ ipcMain.handle('save-pdf-export', async (_event, conversation) => {
     return { canceled: false, filePath };
   } finally {
     pdfWindow.destroy();
+  }
+});
+
+ipcMain.handle('print-conversation', async (_event, conversation) => {
+  const validatedConversation = getValidatedConversation(conversation);
+  const printWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+
+  try {
+    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildPdfHtml(validatedConversation))}`);
+    await new Promise((resolve, reject) => {
+      printWindow.webContents.print({ printBackground: true, silent: false }, (success, failureReason) => {
+        if (success) {
+          resolve();
+          return;
+        }
+
+        reject(new Error(failureReason || 'Print failed.'));
+      });
+    });
+
+    return { canceled: false };
+  } finally {
+    printWindow.destroy();
   }
 });
 

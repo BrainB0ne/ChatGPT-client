@@ -7,6 +7,7 @@ A native Electron desktop wrapper that opens ChatGPT in an app window.
 - Bottom-right refresh button for reloading ChatGPT from inside the app window.
 - Bottom-right Markdown export button for saving the currently rendered chat as `chatgpt-export-YYYY-MM-DDTHH-MM-SS.md`.
 - Bottom-right PDF export button for saving the currently rendered chat as `chatgpt-export-YYYY-MM-DDTHH-MM-SS.pdf`.
+- Bottom-right print button for printing the currently rendered chat.
 - F5 reload shortcut.
 - Right-click context menu with cut, copy, paste, and select-all actions.
 - System tray icon while running; closing the window hides it to the tray.
