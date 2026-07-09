@@ -2,6 +2,8 @@
 
 A native Electron desktop wrapper that opens ChatGPT in an app window.
 
+This project is a fork of the original ChatGPT-client application.
+
 ## Features
 
 - Bottom-right refresh button for reloading ChatGPT from inside the app window.
