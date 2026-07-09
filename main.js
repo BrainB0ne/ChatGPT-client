@@ -53,7 +53,7 @@ const ACTION_BUTTONS_SCRIPT = `
   const style = document.createElement('style');
   style.textContent = [
     ':host { display: block; }',
-    '.actions { display: flex; gap: 8px; }',
+    '.actions { display: grid; gap: 8px; grid-template-columns: repeat(2, 36px); }',
     'button {',
     '  align-items: center;',
     '  background: rgba(255, 255, 255, 0.92);',
@@ -341,7 +341,7 @@ const ACTION_BUTTONS_SCRIPT = `
 
   const actions = document.createElement('div');
   actions.className = 'actions';
-  actions.append(exportButton, pdfButton, printButton, refreshButton);
+  actions.append(printButton, refreshButton, exportButton, pdfButton);
 
   shadow.append(style, actions);
   document.documentElement.appendChild(host);
