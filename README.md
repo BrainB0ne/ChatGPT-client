@@ -10,6 +10,7 @@ This project is a fork of the original ChatGPT-client application.
 - Bottom-right Markdown export button for saving the currently rendered chat as `chatgpt-export-YYYY-MM-DDTHH-MM-SS.md`.
 - Bottom-right PDF export button for saving the currently rendered chat as `chatgpt-export-YYYY-MM-DDTHH-MM-SS.pdf`.
 - Bottom-right print button for printing the currently rendered chat.
+- Export preferences for default folder, timestamps, role headings, PDF page size, and saving without a dialog.
 - F5 reload shortcut.
 - Right-click context menu with cut, copy, paste, and select-all actions.
 - System tray icon while running; closing the window hides it to the tray.
@@ -35,6 +36,16 @@ npm install
 ```bash
 npm start
 ```
+
+## Export Preferences
+
+Export preferences are available from the tray menu under `Settings > Export Preferences`.
+
+- Choose a default export folder, or reset exports back to Documents.
+- Include or hide export timestamps.
+- Include or hide User/Assistant role headings.
+- Choose the PDF page size: A4 or Letter.
+- Enable saving without a dialog to write exports directly to the default folder.
 
 ## Build Linux packages
 

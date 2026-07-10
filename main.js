@@ -7,7 +7,7 @@
 const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, session, shell } = require('electron');
 const { readFileSync } = require('fs');
 const { mkdir, readFile, writeFile } = require('fs/promises');
-const { join } = require('path');
+const { dirname, join } = require('path');
 
 let mainWindow = null;
 let tray = null;
@@ -16,8 +16,17 @@ let isQuitting = false;
 const DEFAULT_SETTINGS = {
   closeToTray: true,
   startMinimized: false,
-  alwaysOnTop: false
+  alwaysOnTop: false,
+  exportPreferences: {
+    directory: '',
+    includeTimestamp: true,
+    includeRoleHeadings: true,
+    pageSize: 'A4',
+    saveWithoutDialog: false
+  }
 };
+
+const PDF_PAGE_SIZES = ['A4', 'Letter'];
 
 let settings = { ...DEFAULT_SETTINGS };
 
@@ -276,11 +285,18 @@ const ACTION_BUTTONS_SCRIPT = `
     return { title, exportedAt, messages };
   }
 
-  function buildMarkdown() {
+  function buildMarkdown(options = {}) {
     const { title, exportedAt, messages } = getConversationExport();
-    const sections = messages.map(message => '## ' + message.role + '\\n\\n' + message.text);
+    const includeTimestamp = options.includeTimestamp !== false;
+    const includeRoleHeadings = options.includeRoleHeadings !== false;
+    const header = ['# ' + title];
+    const sections = messages.map(message => includeRoleHeadings ? '## ' + message.role + '\\n\\n' + message.text : message.text);
 
-    return '# ' + title + '\\n\\nExported: ' + exportedAt + '\\n\\n' + sections.join('\\n\\n---\\n\\n') + '\\n';
+    if (includeTimestamp) {
+      header.push('Exported: ' + exportedAt);
+    }
+
+    return header.join('\\n\\n') + '\\n\\n' + sections.join('\\n\\n---\\n\\n') + '\\n';
   }
 
   const refreshButton = createButton('Refresh', 'Refresh ChatGPT', iconSvgs.reload);
@@ -297,7 +313,11 @@ const ACTION_BUTTONS_SCRIPT = `
         throw new Error('Markdown export is not available in this window.');
       }
 
-      await window.chatgptDesktop.saveMarkdown(buildMarkdown());
+      const exportPreferences = window.chatgptDesktop.getExportPreferences
+        ? await window.chatgptDesktop.getExportPreferences()
+        : {};
+
+      await window.chatgptDesktop.saveMarkdown(buildMarkdown(exportPreferences));
     } catch (error) {
       window.alert(error.message || 'Failed to export Markdown.');
     } finally {
@@ -366,6 +386,16 @@ function getSettingsPath() {
   return join(app.getPath('userData'), 'settings.json');
 }
 
+function normalizeExportPreferences(value = {}) {
+  return {
+    directory: typeof value.directory === 'string' ? value.directory : DEFAULT_SETTINGS.exportPreferences.directory,
+    includeTimestamp: typeof value.includeTimestamp === 'boolean' ? value.includeTimestamp : DEFAULT_SETTINGS.exportPreferences.includeTimestamp,
+    includeRoleHeadings: typeof value.includeRoleHeadings === 'boolean' ? value.includeRoleHeadings : DEFAULT_SETTINGS.exportPreferences.includeRoleHeadings,
+    pageSize: PDF_PAGE_SIZES.includes(value.pageSize) ? value.pageSize : DEFAULT_SETTINGS.exportPreferences.pageSize,
+    saveWithoutDialog: typeof value.saveWithoutDialog === 'boolean' ? value.saveWithoutDialog : DEFAULT_SETTINGS.exportPreferences.saveWithoutDialog
+  };
+}
+
 async function loadSettings() {
   try {
     const rawSettings = await readFile(getSettingsPath(), 'utf8');
@@ -375,7 +405,8 @@ async function loadSettings() {
       ...DEFAULT_SETTINGS,
       closeToTray: typeof parsedSettings.closeToTray === 'boolean' ? parsedSettings.closeToTray : DEFAULT_SETTINGS.closeToTray,
       startMinimized: typeof parsedSettings.startMinimized === 'boolean' ? parsedSettings.startMinimized : DEFAULT_SETTINGS.startMinimized,
-      alwaysOnTop: typeof parsedSettings.alwaysOnTop === 'boolean' ? parsedSettings.alwaysOnTop : DEFAULT_SETTINGS.alwaysOnTop
+      alwaysOnTop: typeof parsedSettings.alwaysOnTop === 'boolean' ? parsedSettings.alwaysOnTop : DEFAULT_SETTINGS.alwaysOnTop,
+      exportPreferences: normalizeExportPreferences(parsedSettings.exportPreferences)
     };
   } catch (error) {
     settings = { ...DEFAULT_SETTINGS };
@@ -407,6 +438,13 @@ async function updateSetting(key, value) {
   }
 
   updateTrayMenu();
+}
+
+async function updateExportPreference(key, value) {
+  await updateSetting('exportPreferences', {
+    ...settings.exportPreferences,
+    [key]: value
+  });
 }
 
 function getTrayIcon() {
@@ -504,12 +542,38 @@ async function clearBrowsingData() {
   });
 }
 
+function getExportDirectory() {
+  return settings.exportPreferences.directory || app.getPath('documents');
+}
+
+function getExportFilename(extension) {
+  return `chatgpt-export-${getLocalTimestampForFilename()}.${extension}`;
+}
+
 function getMarkdownExportPath() {
-  return join(app.getPath('documents'), `chatgpt-export-${getLocalTimestampForFilename()}.md`);
+  return join(getExportDirectory(), getExportFilename('md'));
 }
 
 function getPdfExportPath() {
-  return join(app.getPath('documents'), `chatgpt-export-${getLocalTimestampForFilename()}.pdf`);
+  return join(getExportDirectory(), getExportFilename('pdf'));
+}
+
+async function chooseExportDirectory() {
+  const { canceled, filePaths } = await dialog.showOpenDialog(getDialogParent(), {
+    title: 'Choose Default Export Folder',
+    defaultPath: getExportDirectory(),
+    properties: ['openDirectory', 'createDirectory']
+  });
+
+  if (canceled || !filePaths[0]) {
+    return;
+  }
+
+  await updateExportPreference('directory', filePaths[0]);
+}
+
+function getDisplayExportDirectory() {
+  return settings.exportPreferences.directory || 'Documents';
 }
 
 function escapeHtml(value) {
@@ -745,10 +809,12 @@ function renderPdfMessage(message) {
   return parts.join('\n');
 }
 
-function buildPdfHtml(conversation) {
+function buildPdfHtml(conversation, options = {}) {
+  const includeTimestamp = options.includeTimestamp !== false;
+  const includeRoleHeadings = options.includeRoleHeadings !== false;
   const sections = conversation.messages.map(message => `
     <section class="message">
-      <h2>${escapeHtml(message.role)}</h2>
+      ${includeRoleHeadings ? `<h2>${escapeHtml(message.role)}</h2>` : ''}
       ${renderPdfMessage(message)}
     </section>
   `).join('\n');
@@ -878,43 +944,70 @@ function buildPdfHtml(conversation) {
 </head>
 <body>
   <h1>${escapeHtml(conversation.title)}</h1>
-  <p class="meta">Exported: ${escapeHtml(conversation.exportedAt)}</p>
+  ${includeTimestamp ? `<p class="meta">Exported: ${escapeHtml(conversation.exportedAt)}</p>` : ''}
   ${sections}
 </body>
 </html>`;
 }
+
+async function saveExportFile(filePath, content, encoding) {
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, content, encoding);
+}
+
+async function getMarkdownSavePath() {
+  const defaultPath = getMarkdownExportPath();
+
+  if (settings.exportPreferences.saveWithoutDialog) {
+    return { canceled: false, filePath: defaultPath };
+  }
+
+  return dialog.showSaveDialog(getDialogParent(), {
+    title: 'Export ChatGPT Conversation',
+    defaultPath,
+    filters: [
+      { name: 'Markdown', extensions: ['md'] },
+      { name: 'Text Files', extensions: ['txt'] }
+    ]
+  });
+}
+
+async function getPdfSavePath() {
+  const defaultPath = getPdfExportPath();
+
+  if (settings.exportPreferences.saveWithoutDialog) {
+    return { canceled: false, filePath: defaultPath };
+  }
+
+  return dialog.showSaveDialog(getDialogParent(), {
+    title: 'Export ChatGPT Conversation as PDF',
+    defaultPath,
+    filters: [
+      { name: 'PDF', extensions: ['pdf'] }
+    ]
+  });
+}
+
+ipcMain.handle('get-export-preferences', () => settings.exportPreferences);
 
 ipcMain.handle('save-markdown-export', async (_event, markdown) => {
   if (typeof markdown !== 'string' || markdown.trim().length === 0) {
     throw new Error('No Markdown content was provided.');
   }
 
-  const { canceled, filePath } = await dialog.showSaveDialog(getDialogParent(), {
-    title: 'Export ChatGPT Conversation',
-    defaultPath: getMarkdownExportPath(),
-    filters: [
-      { name: 'Markdown', extensions: ['md'] },
-      { name: 'Text Files', extensions: ['txt'] }
-    ]
-  });
+  const { canceled, filePath } = await getMarkdownSavePath();
 
   if (canceled || !filePath) {
     return { canceled: true };
   }
 
-  await writeFile(filePath, markdown, 'utf8');
+  await saveExportFile(filePath, markdown, 'utf8');
   return { canceled: false, filePath };
 });
 
 ipcMain.handle('save-pdf-export', async (_event, conversation) => {
   const validatedConversation = getValidatedConversation(conversation);
-  const { canceled, filePath } = await dialog.showSaveDialog(getDialogParent(), {
-    title: 'Export ChatGPT Conversation as PDF',
-    defaultPath: getPdfExportPath(),
-    filters: [
-      { name: 'PDF', extensions: ['pdf'] }
-    ]
-  });
+  const { canceled, filePath } = await getPdfSavePath();
 
   if (canceled || !filePath) {
     return { canceled: true };
@@ -930,9 +1023,9 @@ ipcMain.handle('save-pdf-export', async (_event, conversation) => {
   });
 
   try {
-    await pdfWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildPdfHtml(validatedConversation))}`);
+    await pdfWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildPdfHtml(validatedConversation, settings.exportPreferences))}`);
     const pdf = await pdfWindow.webContents.printToPDF({
-      pageSize: 'A4',
+      pageSize: settings.exportPreferences.pageSize,
       printBackground: true,
       margins: {
         marginType: 'custom',
@@ -943,7 +1036,7 @@ ipcMain.handle('save-pdf-export', async (_event, conversation) => {
       }
     });
 
-    await writeFile(filePath, pdf);
+    await saveExportFile(filePath, pdf);
     return { canceled: false, filePath };
   } finally {
     pdfWindow.destroy();
@@ -962,7 +1055,7 @@ ipcMain.handle('print-conversation', async (_event, conversation) => {
   });
 
   try {
-    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildPdfHtml(validatedConversation))}`);
+    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildPdfHtml(validatedConversation, settings.exportPreferences))}`);
     await new Promise((resolve, reject) => {
       printWindow.webContents.print({ printBackground: true, silent: false }, (success, failureReason) => {
         if (success) {
@@ -1018,6 +1111,54 @@ function updateTrayMenu() {
           type: 'checkbox',
           checked: settings.alwaysOnTop,
           click: () => updateSetting('alwaysOnTop', !settings.alwaysOnTop)
+        },
+        { type: 'separator' },
+        {
+          label: 'Export Preferences',
+          submenu: [
+            {
+              label: `Default Folder: ${getDisplayExportDirectory()}`,
+              enabled: false
+            },
+            {
+              label: 'Choose Default Folder...',
+              click: chooseExportDirectory
+            },
+            {
+              label: 'Reset to Documents',
+              enabled: Boolean(settings.exportPreferences.directory),
+              click: () => updateExportPreference('directory', '')
+            },
+            { type: 'separator' },
+            {
+              label: 'Include Timestamp',
+              type: 'checkbox',
+              checked: settings.exportPreferences.includeTimestamp,
+              click: () => updateExportPreference('includeTimestamp', !settings.exportPreferences.includeTimestamp)
+            },
+            {
+              label: 'Include Role Headings',
+              type: 'checkbox',
+              checked: settings.exportPreferences.includeRoleHeadings,
+              click: () => updateExportPreference('includeRoleHeadings', !settings.exportPreferences.includeRoleHeadings)
+            },
+            {
+              label: 'Save Without Dialog',
+              type: 'checkbox',
+              checked: settings.exportPreferences.saveWithoutDialog,
+              click: () => updateExportPreference('saveWithoutDialog', !settings.exportPreferences.saveWithoutDialog)
+            },
+            { type: 'separator' },
+            {
+              label: 'PDF Page Size',
+              submenu: PDF_PAGE_SIZES.map(pageSize => ({
+                label: pageSize,
+                type: 'radio',
+                checked: settings.exportPreferences.pageSize === pageSize,
+                click: () => updateExportPreference('pageSize', pageSize)
+              }))
+            }
+          ]
         }
       ]
     },
