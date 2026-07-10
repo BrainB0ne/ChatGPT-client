@@ -45,8 +45,8 @@ const ACTION_BUTTONS_SCRIPT = `
   const host = document.createElement('div');
   host.id = hostId;
   host.style.position = 'fixed';
-  host.style.bottom = '44px';
-  host.style.right = '24px';
+  host.style.bottom = '36px';
+  host.style.right = '36px';
   host.style.zIndex = '2147483647';
 
   const shadow = host.attachShadow({ mode: 'closed' });
