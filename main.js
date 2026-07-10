@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS = {
   closeToTray: true,
   startMinimized: false,
   alwaysOnTop: false,
+  compatibilityMode: false,
   exportPreferences: {
     directory: '',
     includeTimestamp: true,
@@ -27,8 +28,13 @@ const DEFAULT_SETTINGS = {
 };
 
 const PDF_PAGE_SIZES = ['A4', 'Letter'];
+const COMPATIBILITY_USER_AGENTS = {
+  linux: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+  win32: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
+};
 
 let settings = { ...DEFAULT_SETTINGS };
+let defaultUserAgent = '';
 
 const ACTION_BUTTON_ICONS = {
   markdown: readFileSync(join(__dirname, 'build', 'icons', 'markdown.svg'), 'utf8'),
@@ -63,6 +69,23 @@ const ACTION_BUTTONS_SCRIPT = `
   style.textContent = [
     ':host { display: block; }',
     '.actions { display: grid; gap: 8px; grid-template-columns: repeat(2, 36px); }',
+    '.toast {',
+    '  background: rgba(17, 24, 39, 0.94);',
+    '  border-radius: 10px;',
+    '  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);',
+    '  color: #ffffff;',
+    '  font: 13px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
+    '  opacity: 0;',
+    '  padding: 10px 12px;',
+    '  pointer-events: none;',
+    '  position: fixed;',
+    '  right: 36px;',
+    '  top: 36px;',
+    '  transform: translateY(-8px);',
+    '  transition: opacity 160ms ease, transform 160ms ease;',
+    '  white-space: nowrap;',
+    '}',
+    '.toast.visible { opacity: 1; transform: translateY(0); }',
     'button {',
     '  align-items: center;',
     '  background: rgba(255, 255, 255, 0.92);',
@@ -108,6 +131,22 @@ const ACTION_BUTTONS_SCRIPT = `
     button.setAttribute('aria-label', label);
     button.appendChild(createIcon(svgMarkup));
     return button;
+  }
+
+  let toastTimer = null;
+
+  function showToast(message) {
+    toast.textContent = message;
+    toast.classList.add('visible');
+
+    if (toastTimer) {
+      window.clearTimeout(toastTimer);
+    }
+
+    toastTimer = window.setTimeout(() => {
+      toast.classList.remove('visible');
+      toastTimer = null;
+    }, 3200);
   }
 
   function cleanText(text) {
@@ -317,7 +356,11 @@ const ACTION_BUTTONS_SCRIPT = `
         ? await window.chatgptDesktop.getExportPreferences()
         : {};
 
-      await window.chatgptDesktop.saveMarkdown(buildMarkdown(exportPreferences));
+      const result = await window.chatgptDesktop.saveMarkdown(buildMarkdown(exportPreferences));
+
+      if (!result?.canceled) {
+        showToast('Markdown export saved.');
+      }
     } catch (error) {
       window.alert(error.message || 'Failed to export Markdown.');
     } finally {
@@ -334,7 +377,11 @@ const ACTION_BUTTONS_SCRIPT = `
         throw new Error('PDF export is not available in this window.');
       }
 
-      await window.chatgptDesktop.savePdf(getConversationExport());
+      const result = await window.chatgptDesktop.savePdf(getConversationExport());
+
+      if (!result?.canceled) {
+        showToast('PDF export saved.');
+      }
     } catch (error) {
       window.alert(error.message || 'Failed to export PDF.');
     } finally {
@@ -351,7 +398,11 @@ const ACTION_BUTTONS_SCRIPT = `
         throw new Error('Print is not available in this window.');
       }
 
-      await window.chatgptDesktop.printConversation(getConversationExport());
+      const result = await window.chatgptDesktop.printConversation(getConversationExport());
+
+      if (!result?.canceled) {
+        showToast('Print job sent.');
+      }
     } catch (error) {
       window.alert(error.message || 'Failed to print conversation.');
     } finally {
@@ -363,7 +414,12 @@ const ACTION_BUTTONS_SCRIPT = `
   actions.className = 'actions';
   actions.append(printButton, refreshButton, exportButton, pdfButton);
 
-  shadow.append(style, actions);
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
+
+  shadow.append(style, toast, actions);
   document.documentElement.appendChild(host);
 })();
 `;
@@ -406,6 +462,7 @@ async function loadSettings() {
       closeToTray: typeof parsedSettings.closeToTray === 'boolean' ? parsedSettings.closeToTray : DEFAULT_SETTINGS.closeToTray,
       startMinimized: typeof parsedSettings.startMinimized === 'boolean' ? parsedSettings.startMinimized : DEFAULT_SETTINGS.startMinimized,
       alwaysOnTop: typeof parsedSettings.alwaysOnTop === 'boolean' ? parsedSettings.alwaysOnTop : DEFAULT_SETTINGS.alwaysOnTop,
+      compatibilityMode: typeof parsedSettings.compatibilityMode === 'boolean' ? parsedSettings.compatibilityMode : DEFAULT_SETTINGS.compatibilityMode,
       exportPreferences: normalizeExportPreferences(parsedSettings.exportPreferences)
     };
   } catch (error) {
@@ -425,6 +482,11 @@ async function updateSetting(key, value) {
     mainWindow.setAlwaysOnTop(value);
   }
 
+  if (key === 'compatibilityMode' && mainWindow && !mainWindow.isDestroyed()) {
+    applyCompatibilityUserAgent(mainWindow);
+    mainWindow.loadURL('https://chatgpt.com');
+  }
+
   try {
     await saveSettings();
   } catch (error) {
@@ -438,6 +500,18 @@ async function updateSetting(key, value) {
   }
 
   updateTrayMenu();
+}
+
+function applyCompatibilityUserAgent(win) {
+  if (!defaultUserAgent) {
+    defaultUserAgent = win.webContents.getUserAgent();
+  }
+
+  win.webContents.setUserAgent(settings.compatibilityMode ? getCompatibilityUserAgent() : defaultUserAgent);
+}
+
+function getCompatibilityUserAgent() {
+  return COMPATIBILITY_USER_AGENTS[process.platform] || COMPATIBILITY_USER_AGENTS.win32;
 }
 
 async function updateExportPreference(key, value) {
@@ -1056,18 +1130,21 @@ ipcMain.handle('print-conversation', async (_event, conversation) => {
 
   try {
     await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildPdfHtml(validatedConversation, settings.exportPreferences))}`);
-    await new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       printWindow.webContents.print({ printBackground: true, silent: false }, (success, failureReason) => {
         if (success) {
-          resolve();
+          resolve({ canceled: false });
+          return;
+        }
+
+        if (/cancel/i.test(failureReason || '')) {
+          resolve({ canceled: true });
           return;
         }
 
         reject(new Error(failureReason || 'Print failed.'));
       });
     });
-
-    return { canceled: false };
   } finally {
     printWindow.destroy();
   }
@@ -1111,6 +1188,12 @@ function updateTrayMenu() {
           type: 'checkbox',
           checked: settings.alwaysOnTop,
           click: () => updateSetting('alwaysOnTop', !settings.alwaysOnTop)
+        },
+        {
+          label: 'Compatibility Mode',
+          type: 'checkbox',
+          checked: settings.compatibilityMode,
+          click: () => updateSetting('compatibilityMode', !settings.compatibilityMode)
         },
         { type: 'separator' },
         {
@@ -1194,6 +1277,7 @@ function createWindow(options = {}) {
   });
 
   mainWindow = win;
+  applyCompatibilityUserAgent(win);
 
   win.on('close', event => {
     if (!isQuitting && settings.closeToTray) {

@@ -15,7 +15,7 @@ This project is a fork of the original ChatGPT-client application.
 - Right-click context menu with cut, copy, paste, and select-all actions.
 - System tray icon while running; closing the window hides it to the tray.
 - Tray menu with show, clear browsing data, about, and quit actions.
-- Tray settings for close-to-tray, start minimized, and always-on-top behavior.
+- Tray settings for close-to-tray, start minimized, always-on-top behavior, and Compatibility Mode.
 - Spell checking is disabled in the app window.
 
 ## Prerequisites (Ubuntu)
@@ -46,6 +46,12 @@ Export preferences are available from the tray menu under `Settings > Export Pre
 - Include or hide User/Assistant role headings.
 - Choose the PDF page size: A4 or Letter.
 - Enable saving without a dialog to write exports directly to the default folder.
+
+## Compatibility Mode
+
+Compatibility Mode is available from the tray menu under `Settings > Compatibility Mode`.
+
+When enabled, ChatGPT-EX reloads ChatGPT with a Chrome-like user agent instead of Electron's default user agent. This can help with site compatibility, but it may not avoid ChatGPT login requirements because those are controlled by ChatGPT and can also depend on cookies, region, account state, experiments, or other browser signals.
 
 ## Build Linux packages
 
