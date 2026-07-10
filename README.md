@@ -15,7 +15,7 @@ This project is a fork of the original ChatGPT-client application.
 - Right-click context menu with cut, copy, paste, and select-all actions.
 - System tray icon while running; closing the window hides it to the tray.
 - Tray menu with show, clear browsing data, about, and quit actions.
-- Tray settings for close-to-tray, start minimized, always-on-top behavior, and Compatibility Mode.
+- Tray settings for close-to-tray, start minimized, always-on-top behavior, Compatibility Mode, and Voice/Microphone Access.
 - Spell checking is disabled in the app window.
 
 ## Prerequisites (Ubuntu)
@@ -52,6 +52,12 @@ Export preferences are available from the tray menu under `Settings > Export Pre
 Compatibility Mode is available from the tray menu under `Settings > Compatibility Mode`.
 
 When enabled, ChatGPT-EX reloads ChatGPT with a Chrome-like user agent instead of Electron's default user agent. This can help with site compatibility, but it may not avoid ChatGPT login requirements because those are controlled by ChatGPT and can also depend on cookies, region, account state, experiments, or other browser signals.
+
+## Voice/Microphone Access
+
+Voice/Microphone Access is available from the tray menu under `Settings > Voice/Microphone Access`.
+
+Microphone access is off by default. When disabled, ChatGPT-EX answers ChatGPT recording permission checks immediately instead of leaving microphone-related browser APIs unresolved. Speaker/audio-output access for ChatGPT is allowed so voice previews can play in settings. Enable Voice/Microphone Access only if you want to use ChatGPT recording features.
 
 ## Build Linux packages
 

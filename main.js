@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS = {
   startMinimized: false,
   alwaysOnTop: false,
   compatibilityMode: false,
+  voiceAccess: false,
   exportPreferences: {
     directory: '',
     includeTimestamp: true,
@@ -463,6 +464,7 @@ async function loadSettings() {
       startMinimized: typeof parsedSettings.startMinimized === 'boolean' ? parsedSettings.startMinimized : DEFAULT_SETTINGS.startMinimized,
       alwaysOnTop: typeof parsedSettings.alwaysOnTop === 'boolean' ? parsedSettings.alwaysOnTop : DEFAULT_SETTINGS.alwaysOnTop,
       compatibilityMode: typeof parsedSettings.compatibilityMode === 'boolean' ? parsedSettings.compatibilityMode : DEFAULT_SETTINGS.compatibilityMode,
+      voiceAccess: typeof parsedSettings.voiceAccess === 'boolean' ? parsedSettings.voiceAccess : DEFAULT_SETTINGS.voiceAccess,
       exportPreferences: normalizeExportPreferences(parsedSettings.exportPreferences)
     };
   } catch (error) {
@@ -512,6 +514,96 @@ function applyCompatibilityUserAgent(win) {
 
 function getCompatibilityUserAgent() {
   return COMPATIBILITY_USER_AGENTS[process.platform] || COMPATIBILITY_USER_AGENTS.win32;
+}
+
+function isChatGptOrigin(origin) {
+  try {
+    const { protocol, hostname } = new URL(origin);
+    return protocol === 'https:' && (hostname === 'chatgpt.com' || hostname.endsWith('.chatgpt.com'));
+  } catch (error) {
+    return false;
+  }
+}
+
+function getPermissionOrigin(fallbackOrigin, details = {}) {
+  return details.requestingUrl || details.securityOrigin || details.origin || fallbackOrigin || '';
+}
+
+function isAudioInputPermissionRequest(permission, details = {}) {
+  if (permission === 'microphone') {
+    return true;
+  }
+
+  if (permission !== 'media') {
+    return false;
+  }
+
+  const mediaTypes = Array.isArray(details.mediaTypes) ? details.mediaTypes : [];
+  return mediaTypes.includes('audio') && !mediaTypes.includes('video');
+}
+
+function isAudioOutputPermissionRequest(permission, details = {}) {
+  if (permission === 'speaker-selection') {
+    return true;
+  }
+
+  const mediaTypes = Array.isArray(details.mediaTypes) ? details.mediaTypes : [];
+  return mediaTypes.includes('audioOutput') || details.deviceType === 'audiooutput' || details.deviceType === 'speaker';
+}
+
+function configurePermissionHandlers(targetSession) {
+  targetSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin, details) => {
+    const origin = getPermissionOrigin(requestingOrigin, details);
+
+    if (!isChatGptOrigin(origin)) {
+      return false;
+    }
+
+    if (isAudioOutputPermissionRequest(permission, details)) {
+      return true;
+    }
+
+    if (isAudioInputPermissionRequest(permission, details)) {
+      return settings.voiceAccess;
+    }
+
+    return false;
+  });
+
+  targetSession.setPermissionRequestHandler((_webContents, permission, callback, details = {}) => {
+    const origin = getPermissionOrigin('', details);
+
+    if (!isChatGptOrigin(origin)) {
+      callback(false);
+      return;
+    }
+
+    if (isAudioOutputPermissionRequest(permission, details)) {
+      callback(true);
+      return;
+    }
+
+    if (isAudioInputPermissionRequest(permission, details)) {
+      callback(settings.voiceAccess);
+      return;
+    }
+
+    callback(false);
+  });
+
+  if (typeof targetSession.setDevicePermissionHandler === 'function') {
+    targetSession.setDevicePermissionHandler(details => {
+      if (!isChatGptOrigin(getPermissionOrigin('', details))) {
+        return false;
+      }
+
+      if (details.deviceType === 'audiooutput' || details.deviceType === 'speaker') {
+        return true;
+      }
+
+      return settings.voiceAccess && (details.deviceType === 'media' || details.deviceType === 'audioinput');
+    });
+  }
 }
 
 async function updateExportPreference(key, value) {
@@ -1195,6 +1287,12 @@ function updateTrayMenu() {
           checked: settings.compatibilityMode,
           click: () => updateSetting('compatibilityMode', !settings.compatibilityMode)
         },
+        {
+          label: 'Voice/Microphone Access',
+          type: 'checkbox',
+          checked: settings.voiceAccess,
+          click: () => updateSetting('voiceAccess', !settings.voiceAccess)
+        },
         { type: 'separator' },
         {
           label: 'Export Preferences',
@@ -1326,6 +1424,7 @@ function createWindow(options = {}) {
 
 app.whenReady().then(async () => {
   await loadSettings();
+  configurePermissionHandlers(session.defaultSession);
   createWindow();
   createTray();
 
