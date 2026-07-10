@@ -124,7 +124,7 @@ echo ============================================
 dir /b dist/*.sha256 dist/SHA256SUMS 2>nul
 echo.
 echo To verify a single package:
-echo   certutil -hashfile "dist\ChatGPT-EX Setup 1.1.0.exe" SHA256
+echo   certutil -hashfile "dist\ChatGPT-EX Setup X.X.X.exe" SHA256
 echo.
 echo Or verify all with Git Bash or Linux:
 echo   cd dist ^&^& sha256sum -c SHA256SUMS
