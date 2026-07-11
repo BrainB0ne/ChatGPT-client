@@ -18,25 +18,6 @@ This project is a fork of the original ChatGPT-client application.
 - Tray settings for close-to-tray, start minimized, always-on-top behavior, Compatibility Mode, and Voice/Microphone Access.
 - Spell checking is disabled in the app window.
 
-## Prerequisites (Ubuntu)
-
-```bash
-sudo apt update
-sudo apt install -y libnss3 libatk-bridge2.0-0 libgtk-3-0 libxss1 libasound2
-```
-
-## Install
-
-```bash
-npm install
-```
-
-## Run the app
-
-```bash
-npm start
-```
-
 ## Export Preferences
 
 Export preferences are available from the tray menu under `Settings > Export Preferences`.
@@ -58,6 +39,25 @@ When enabled, ChatGPT-EX reloads ChatGPT with a Chrome-like user agent instead o
 Voice/Microphone Access is available from the tray menu under `Settings > Voice/Microphone Access`.
 
 Microphone access is off by default. When disabled, ChatGPT-EX answers ChatGPT recording permission checks immediately instead of leaving microphone-related browser APIs unresolved. Speaker/audio-output access for ChatGPT is allowed so voice previews can play in settings. Enable Voice/Microphone Access only if you want to use ChatGPT recording features.
+
+## Prerequisites (Ubuntu)
+
+```bash
+sudo apt update
+sudo apt install -y libnss3 libatk-bridge2.0-0 libgtk-3-0 libxss1 libasound2
+```
+
+## Install
+
+```bash
+npm install
+```
+
+## Run the app
+
+```bash
+npm start
+```
 
 ## Build Linux packages
 
