@@ -150,6 +150,70 @@ const ACTION_BUTTONS_SCRIPT = `
     }, 3200);
   }
 
+  function getDroppedFiles(event) {
+    const files = Array.from(event.dataTransfer?.files || []);
+    return files.filter(file => file && file.size >= 0);
+  }
+
+  function hasFileDrag(event) {
+    return Array.from(event.dataTransfer?.types || []).includes('Files');
+  }
+
+  function findFileInput(files) {
+    const fileInputs = Array.from(document.querySelectorAll('input[type="file"]'))
+      .filter(input => !input.disabled);
+
+    if (fileInputs.length === 0) {
+      return null;
+    }
+
+    const imageOnly = files.length > 0 && files.every(file => file.type.startsWith('image/'));
+
+    return fileInputs.find(input => {
+      const accept = String(input.getAttribute('accept') || '').toLowerCase();
+      return imageOnly && (accept.includes('image') || accept.includes('*/*'));
+    }) || fileInputs[fileInputs.length - 1];
+  }
+
+  function uploadDroppedFiles(event) {
+    const files = getDroppedFiles(event);
+
+    if (files.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const input = findFileInput(files);
+
+    if (!input) {
+      showToast('No ChatGPT upload control found.');
+      return;
+    }
+
+    try {
+      const transfer = new DataTransfer();
+      files.forEach(file => transfer.items.add(file));
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      showToast(files.length === 1 ? 'File added to chat.' : files.length + ' files added to chat.');
+    } catch (error) {
+      showToast('File drop failed. Use the attach button.');
+    }
+  }
+
+  window.addEventListener('dragover', event => {
+    if (!hasFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }, true);
+
+  window.addEventListener('drop', uploadDroppedFiles);
+
   function cleanText(text) {
     return text
       .replace(/\\u00a0/g, ' ')

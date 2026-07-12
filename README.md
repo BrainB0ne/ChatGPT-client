@@ -10,6 +10,7 @@ This project is a fork of the original ChatGPT-client application.
 - Bottom-right Markdown export button for saving the currently rendered chat as `chatgpt-export-YYYY-MM-DDTHH-MM-SS.md`.
 - Bottom-right PDF export button for saving the currently rendered chat as `chatgpt-export-YYYY-MM-DDTHH-MM-SS.pdf`.
 - Bottom-right print button for printing the currently rendered chat.
+- Drag-and-drop file upload fallback for adding images/files to the chat prompt.
 - Export preferences for default folder, timestamps, role headings, PDF page size, and saving without a dialog.
 - F5 reload shortcut.
 - Right-click context menu with cut, copy, paste, and select-all actions.
