@@ -54,8 +54,10 @@ const ACTION_BUTTONS_SCRIPT = `
     reload: '__RELOAD_ICON__'
   };
 
-  if (document.getElementById(hostId)) {
-    return;
+  const existingHost = document.getElementById(hostId);
+
+  if (existingHost) {
+    existingHost.remove();
   }
 
   const host = document.createElement('div');
