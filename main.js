@@ -56,6 +56,7 @@ let defaultUserAgent = '';
 
 const ACTION_BUTTON_ICONS = {
   markdown: readFileSync(join(__dirname, 'build', 'icons', 'markdown.svg'), 'utf8'),
+  html: readFileSync(join(__dirname, 'build', 'icons', 'file-type-html.svg'), 'utf8'),
   pdf: readFileSync(join(__dirname, 'build', 'icons', 'file-type-pdf.svg'), 'utf8'),
   print: readFileSync(join(__dirname, 'build', 'icons', 'printer.svg'), 'utf8'),
   reload: readFileSync(join(__dirname, 'build', 'icons', 'reload.svg'), 'utf8')
@@ -66,6 +67,7 @@ const ACTION_BUTTONS_SCRIPT = `
   const hostId = 'chatgpt-ex-actions-host';
   const iconSvgs = {
     markdown: '__MARKDOWN_ICON__',
+    html: '__HTML_ICON__',
     pdf: '__PDF_ICON__',
     print: '__PRINT_ICON__',
     reload: '__RELOAD_ICON__'
@@ -473,6 +475,27 @@ const ACTION_BUTTONS_SCRIPT = `
     }
   });
 
+  const htmlButton = createButton('Export HTML', 'Export visible chat to HTML', iconSvgs.html);
+  htmlButton.addEventListener('click', async () => {
+    try {
+      htmlButton.disabled = true;
+
+      if (!window.chatgptDesktop?.saveHtml) {
+        throw new Error('HTML export is not available in this window.');
+      }
+
+      const result = await window.chatgptDesktop.saveHtml(getConversationExport());
+
+      if (!result?.canceled) {
+        showToast('HTML export saved.');
+      }
+    } catch (error) {
+      window.alert(error.message || 'Failed to export HTML.');
+    } finally {
+      htmlButton.disabled = false;
+    }
+  });
+
   const printButton = createButton('Print', 'Print visible chat', iconSvgs.print);
   printButton.addEventListener('click', async () => {
     try {
@@ -496,7 +519,9 @@ const ACTION_BUTTONS_SCRIPT = `
 
   const actions = document.createElement('div');
   actions.className = 'actions';
-  actions.append(printButton, refreshButton, exportButton, pdfButton);
+  const spacer = document.createElement('span');
+  spacer.setAttribute('aria-hidden', 'true');
+  actions.append(spacer, refreshButton, printButton, exportButton, htmlButton, pdfButton);
 
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -511,6 +536,7 @@ const ACTION_BUTTONS_SCRIPT = `
 function getActionButtonsScript() {
   return ACTION_BUTTONS_SCRIPT
     .replace("'__MARKDOWN_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.markdown))
+    .replace("'__HTML_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.html))
     .replace("'__PDF_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.pdf))
     .replace("'__PRINT_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.print))
     .replace("'__RELOAD_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.reload));
@@ -814,6 +840,10 @@ function getExportFilename(extension) {
 
 function getMarkdownExportPath() {
   return join(getExportDirectory(), getExportFilename('md'));
+}
+
+function getHtmlExportPath() {
+  return join(getExportDirectory(), getExportFilename('html'));
 }
 
 function getPdfExportPath() {
@@ -1234,6 +1264,22 @@ async function getMarkdownSavePath() {
   });
 }
 
+async function getHtmlSavePath() {
+  const defaultPath = getHtmlExportPath();
+
+  if (settings.exportPreferences.saveWithoutDialog) {
+    return { canceled: false, filePath: defaultPath };
+  }
+
+  return dialog.showSaveDialog(getDialogParent(), {
+    title: 'Export ChatGPT Conversation as HTML',
+    defaultPath,
+    filters: [
+      { name: 'HTML', extensions: ['html', 'htm'] }
+    ]
+  });
+}
+
 async function getPdfSavePath() {
   const defaultPath = getPdfExportPath();
 
@@ -1264,6 +1310,18 @@ ipcMain.handle('save-markdown-export', async (_event, markdown) => {
   }
 
   await saveExportFile(filePath, markdown, 'utf8');
+  return { canceled: false, filePath };
+});
+
+ipcMain.handle('save-html-export', async (_event, conversation) => {
+  const validatedConversation = getValidatedConversation(conversation);
+  const { canceled, filePath } = await getHtmlSavePath();
+
+  if (canceled || !filePath) {
+    return { canceled: true };
+  }
+
+  await saveExportFile(filePath, buildPdfHtml(validatedConversation, settings.exportPreferences), 'utf8');
   return { canceled: false, filePath };
 });
 
