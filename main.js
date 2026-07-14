@@ -9,6 +9,22 @@ const { readFileSync } = require('fs');
 const { mkdir, readFile, writeFile } = require('fs/promises');
 const { dirname, join } = require('path');
 
+if (process.platform === 'win32') {
+  app.setAppUserModelId('eu.brainbytez.chatgpt-ex');
+}
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      showMainWindow();
+    }
+  });
+}
+
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
@@ -617,6 +633,10 @@ function isAudioOutputPermissionRequest(permission, details = {}) {
   return mediaTypes.includes('audioOutput') || details.deviceType === 'audiooutput' || details.deviceType === 'speaker';
 }
 
+function isClipboardWritePermission(permission) {
+  return permission === 'clipboard-sanitized-write';
+}
+
 function configurePermissionHandlers(targetSession) {
   targetSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin, details) => {
     const origin = getPermissionOrigin(requestingOrigin, details);
@@ -626,6 +646,10 @@ function configurePermissionHandlers(targetSession) {
     }
 
     if (isAudioOutputPermissionRequest(permission, details)) {
+      return true;
+    }
+
+    if (isClipboardWritePermission(permission)) {
       return true;
     }
 
@@ -645,6 +669,11 @@ function configurePermissionHandlers(targetSession) {
     }
 
     if (isAudioOutputPermissionRequest(permission, details)) {
+      callback(true);
+      return;
+    }
+
+    if (isClipboardWritePermission(permission)) {
       callback(true);
       return;
     }
@@ -1488,21 +1517,23 @@ function createWindow(options = {}) {
   win.loadURL('https://chatgpt.com');
 }
 
-app.whenReady().then(async () => {
-  await loadSettings();
-  configurePermissionHandlers(session.defaultSession);
-  createWindow();
-  createTray();
+if (hasSingleInstanceLock) {
+  app.whenReady().then(async () => {
+    await loadSettings();
+    configurePermissionHandlers(session.defaultSession);
+    createWindow();
+    createTray();
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow({ show: true });
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow({ show: true });
+      }
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (isQuitting && process.platform !== 'darwin') {
+      app.quit();
     }
   });
-});
-
-app.on('window-all-closed', () => {
-  if (isQuitting && process.platform !== 'darwin') {
-    app.quit();
-  }
-});
+}

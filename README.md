@@ -15,6 +15,7 @@ This project is a fork of the original ChatGPT-client application.
 - F5 reload shortcut.
 - Right-click context menu with cut, copy, paste, and select-all actions.
 - System tray icon while running; closing the window hides it to the tray.
+- Only one app instance can run; launching it again restores the existing window.
 - Tray menu with show, clear browsing data, about, and quit actions.
 - Tray settings for close-to-tray, start minimized, always-on-top behavior, Compatibility Mode, and Voice/Microphone Access.
 - Spell checking is disabled in the app window.
@@ -50,8 +51,16 @@ sudo apt install -y libnss3 libatk-bridge2.0-0 libgtk-3-0 libxss1 libasound2
 
 ## Install
 
+Electron 43 requires Node.js 22.12.0 or newer.
+
 ```bash
 npm install
+```
+
+## Update to Electron 43
+```bash
+npm install --save-dev --save-exact electron@43.1.0
+npm run build:win
 ```
 
 ## Run the app
