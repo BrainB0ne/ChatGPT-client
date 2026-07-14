@@ -58,10 +58,9 @@ Electron 43 requires Node.js 22.12.0 or newer.
 npm install
 ```
 
-## Update to Electron 43
+## Upgrade to Electron 43
 ```bash
 npm install --save-dev --save-exact electron@43.1.0
-npm run build:win
 ```
 
 ## Run the app
