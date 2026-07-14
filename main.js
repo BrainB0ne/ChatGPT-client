@@ -1,6 +1,7 @@
 /*
  * Extended ChatGPT Desktop Client Wrapper (ChatGPT-EX)
  * Developer: BrainByteZ
+ * Developer: Stephan Coertzen <coertzen.jfs@gmail.com>
  * License: MIT
  */
 
