@@ -1,6 +1,6 @@
 {
   "name": "chatgpt-ex",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Extended desktop wrapper for ChatGPT with Markdown and PDF export",
   "homepage": "https://chatgpt.com",
   "main": "main.js",

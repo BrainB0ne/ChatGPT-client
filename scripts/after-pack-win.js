@@ -15,6 +15,15 @@ module.exports = async context => {
   const rcedit = await getRceditBundle('1.1.0');
   const exePath = join(context.appOutDir, `${context.packager.appInfo.productFilename}.exe`);
   const iconPath = resolve('build/icons/icon.ico');
+  const productName = context.packager.appInfo.productName;
+  const executableName = `${context.packager.appInfo.productFilename}.exe`;
 
-  execFileSync(rcedit.x64, [exePath, '--set-icon', iconPath], { stdio: 'inherit' });
+  execFileSync(rcedit.x64, [
+    exePath,
+    '--set-icon', iconPath,
+    '--set-version-string', 'FileDescription', productName,
+    '--set-version-string', 'ProductName', productName,
+    '--set-version-string', 'InternalName', context.packager.appInfo.productFilename,
+    '--set-version-string', 'OriginalFilename', executableName
+  ], { stdio: 'inherit' });
 };
