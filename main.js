@@ -46,10 +46,6 @@ const DEFAULT_SETTINGS = {
 };
 
 const PDF_PAGE_SIZES = ['A4', 'Letter'];
-const COMPATIBILITY_USER_AGENTS = {
-  linux: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
-  win32: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
-};
 
 let settings = { ...DEFAULT_SETTINGS };
 let defaultUserAgent = '';
@@ -90,7 +86,7 @@ const ACTION_BUTTONS_SCRIPT = `
   const style = document.createElement('style');
   style.textContent = [
     ':host { display: block; }',
-    '.actions { display: grid; gap: 8px; grid-template-columns: repeat(2, 36px); }',
+    '.actions { display: grid; gap: 8px; grid-template-columns: 36px; }',
     '.toast {',
     '  background: rgba(17, 24, 39, 0.94);',
     '  border-radius: 10px;',
@@ -519,9 +515,7 @@ const ACTION_BUTTONS_SCRIPT = `
 
   const actions = document.createElement('div');
   actions.className = 'actions';
-  const spacer = document.createElement('span');
-  spacer.setAttribute('aria-hidden', 'true');
-  actions.append(spacer, refreshButton, printButton, exportButton, htmlButton, pdfButton);
+  actions.append(refreshButton, printButton, exportButton, htmlButton, pdfButton);
 
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -622,7 +616,11 @@ function applyCompatibilityUserAgent(win) {
 }
 
 function getCompatibilityUserAgent() {
-  return COMPATIBILITY_USER_AGENTS[process.platform] || COMPATIBILITY_USER_AGENTS.win32;
+  const platform = process.platform === 'linux'
+    ? 'X11; Linux x86_64'
+    : 'Windows NT 10.0; Win64; x64';
+
+  return `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`;
 }
 
 function isChatGptOrigin(origin) {
@@ -765,7 +763,7 @@ function showAboutDialog() {
     type: 'info',
     title: 'About ChatGPT-EX',
     message: 'ChatGPT-EX',
-    detail: `Extended ChatGPT Desktop Client Wrapper\nVersion ${app.getVersion()}\nhttps://chatgpt.com`,
+    detail: `Extended ChatGPT Desktop Client Wrapper\nVersion ${app.getVersion()}`,
     buttons: ['OK']
   });
 }
