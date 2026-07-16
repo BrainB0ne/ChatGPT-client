@@ -1387,8 +1387,10 @@ ipcMain.handle('print-conversation', async (_event, conversation) => {
 
   try {
     await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildPdfHtml(validatedConversation, settings.exportPreferences))}`);
+
     return await new Promise((resolve, reject) => {
-      printWindow.webContents.print({ printBackground: true, silent: false }, (success, failureReason) => {
+      // Electron 43 can reject non-empty print options with "Invalid printer settings".
+      printWindow.webContents.print({}, (success, failureReason) => {
         if (success) {
           resolve({ canceled: false });
           return;
