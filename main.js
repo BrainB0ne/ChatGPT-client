@@ -758,6 +758,19 @@ function showMainWindow() {
   mainWindow.focus();
 }
 
+function toggleDevTools() {
+  showMainWindow();
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.webContents.isDevToolsOpened()) {
+      mainWindow.webContents.closeDevTools();
+      return;
+    }
+
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  }
+}
+
 function showAboutDialog() {
   dialog.showMessageBox(getDialogParent(), {
     type: 'info',
@@ -1496,6 +1509,7 @@ function updateTrayMenu() {
       ]
     },
     { label: 'Clear Browsing Data', click: clearBrowsingData },
+    { label: 'Developer Tools (F12)', click: toggleDevTools },
     { label: 'About', click: showAboutDialog },
     { type: 'separator' },
     {
@@ -1554,6 +1568,11 @@ function createWindow(options = {}) {
     if (input.type === 'keyDown' && input.key === 'F5') {
       event.preventDefault();
       win.webContents.reload();
+    }
+
+    if (input.type === 'keyDown' && input.key === 'F12') {
+      event.preventDefault();
+      toggleDevTools();
     }
   });
 

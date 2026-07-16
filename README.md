@@ -13,11 +13,12 @@ This project is a fork of the original ChatGPT-client application.
 - Bottom-right print button for printing the currently rendered chat.
 - Drag-and-drop file upload fallback for adding images/files to the chat prompt.
 - Export preferences for default folder, timestamps, role headings, PDF page size, and saving without a dialog.
-- F5 reload shortcut.
+- F5 reload and F12 Developer Tools shortcuts.
 - Right-click context menu with cut, copy, paste, and select-all actions.
 - System tray icon while running; closing the window hides it to the tray.
 - Only one app instance can run; launching it again restores the existing window.
 - Tray menu with show, clear browsing data, about, and quit actions.
+- `Developer Tools (F12)` tray action toggles Chromium DevTools in a detached window.
 - Tray settings for close-to-tray, start minimized, always-on-top behavior, Compatibility Mode, and Voice/Microphone Access.
 - Spell checking is disabled in the app window.
 
