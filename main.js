@@ -385,7 +385,21 @@ const ACTION_BUTTONS_SCRIPT = `
     }));
   }
 
-  function getConversationExport() {
+  async function getCurrentChatTitle() {
+    if (window.chatgptDesktop?.getWindowTitle) {
+      const windowTitle = cleanText(await window.chatgptDesktop.getWindowTitle());
+
+      if (windowTitle) {
+        return windowTitle;
+      }
+    }
+
+    return cleanText(document.title)
+      .replace(/^ChatGPT\\s*[-|]\\s*/i, '')
+      .replace(/\\s*[-|]\\s*ChatGPT$/i, '') || 'ChatGPT conversation';
+  }
+
+  async function getConversationExport() {
     const messages = findRenderedMessages()
       .map(({ role, node }) => {
         const contentNode = node.querySelector('.markdown, [data-message-id]') || node;
@@ -400,14 +414,14 @@ const ACTION_BUTTONS_SCRIPT = `
       throw new Error('No rendered ChatGPT messages were found to export.');
     }
 
-    const title = cleanText(document.title.replace(/\\s*[-|]\\s*ChatGPT\\s*$/i, '')) || 'ChatGPT conversation';
+    const title = await getCurrentChatTitle();
     const exportedAt = formatLocalTimestamp(new Date());
 
     return { title, exportedAt, messages };
   }
 
-  function buildMarkdown(options = {}) {
-    const { title, exportedAt, messages } = getConversationExport();
+  async function buildMarkdown(options = {}) {
+    const { title, exportedAt, messages } = await getConversationExport();
     const includeTimestamp = options.includeTimestamp !== false;
     const includeRoleHeadings = options.includeRoleHeadings !== false;
     const header = ['# ' + title];
@@ -438,7 +452,7 @@ const ACTION_BUTTONS_SCRIPT = `
         ? await window.chatgptDesktop.getExportPreferences()
         : {};
 
-      const result = await window.chatgptDesktop.saveMarkdown(buildMarkdown(exportPreferences));
+      const result = await window.chatgptDesktop.saveMarkdown(await buildMarkdown(exportPreferences));
 
       if (!result?.canceled) {
         showToast('Markdown export saved.');
@@ -459,7 +473,7 @@ const ACTION_BUTTONS_SCRIPT = `
         throw new Error('PDF export is not available in this window.');
       }
 
-      const result = await window.chatgptDesktop.savePdf(getConversationExport());
+      const result = await window.chatgptDesktop.savePdf(await getConversationExport());
 
       if (!result?.canceled) {
         showToast('PDF export saved.');
@@ -480,7 +494,7 @@ const ACTION_BUTTONS_SCRIPT = `
         throw new Error('HTML export is not available in this window.');
       }
 
-      const result = await window.chatgptDesktop.saveHtml(getConversationExport());
+      const result = await window.chatgptDesktop.saveHtml(await getConversationExport());
 
       if (!result?.canceled) {
         showToast('HTML export saved.');
@@ -501,7 +515,7 @@ const ACTION_BUTTONS_SCRIPT = `
         throw new Error('Print is not available in this window.');
       }
 
-      const result = await window.chatgptDesktop.printConversation(getConversationExport());
+      const result = await window.chatgptDesktop.printConversation(await getConversationExport());
 
       if (!result?.canceled) {
         showToast('Print job sent.');
@@ -1308,6 +1322,10 @@ async function getPdfSavePath() {
 }
 
 ipcMain.handle('get-export-preferences', () => settings.exportPreferences);
+
+ipcMain.handle('get-window-title', event => {
+  return BrowserWindow.fromWebContents(event.sender)?.getTitle() || '';
+});
 
 ipcMain.handle('save-markdown-export', async (_event, markdown) => {
   if (typeof markdown !== 'string' || markdown.trim().length === 0) {

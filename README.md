@@ -11,6 +11,7 @@ This project is a fork of the original ChatGPT-client application.
 - Bottom-right HTML export button for saving the currently rendered chat as a self-contained `chatgpt-export-YYYY-MM-DDTHH-MM-SS.html` file.
 - Bottom-right PDF export button for saving the currently rendered chat as `chatgpt-export-YYYY-MM-DDTHH-MM-SS.pdf`.
 - Bottom-right print button for printing the currently rendered chat.
+- Exports and print jobs use the Electron window title for the active chat instead of the project-level page title.
 - Drag-and-drop file upload fallback for adding images/files to the chat prompt.
 - Export preferences for default folder, timestamps, role headings, PDF page size, and saving without a dialog.
 - F5 reload and F12 Developer Tools shortcuts.
