@@ -20,7 +20,7 @@ This project is a fork of the original ChatGPT-client application.
 - Only one app instance can run; launching it again restores the existing window.
 - Tray menu with show, clear browsing data, about, and quit actions.
 - `Developer Tools (F12)` tray action toggles Chromium DevTools in a detached window.
-- Tray settings for close-to-tray, start minimized, always-on-top behavior, Compatibility Mode, and Voice/Microphone Access.
+- Tray settings for close-to-tray, start minimized, always-on-top behavior, Compatibility Mode, Voice/Microphone Access, and window-state persistence.
 - Spell checking is disabled in the app window.
 
 ## Export Preferences
@@ -44,6 +44,10 @@ When enabled, ChatGPT-EX reloads ChatGPT with a Chrome-like user agent instead o
 Voice/Microphone Access is available from the tray menu under `Settings > Voice/Microphone Access`.
 
 Microphone access is off by default. When disabled, ChatGPT-EX answers ChatGPT recording permission checks immediately instead of leaving microphone-related browser APIs unresolved. Speaker/audio-output access for ChatGPT is allowed so voice previews can play in settings. Enable Voice/Microphone Access only if you want to use ChatGPT recording features.
+
+## Window State
+
+`Settings > Remember Window Size and Position` is off by default. When enabled, ChatGPT-EX saves the normal window size and display position, then restores them at the next launch. Stored bounds outside connected displays are ignored.
 
 ## Prerequisites (Ubuntu)
 

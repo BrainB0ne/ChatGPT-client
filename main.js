@@ -5,7 +5,7 @@
  * License: MIT
  */
 
-const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, screen, session, shell } = require('electron');
 const { readFileSync } = require('fs');
 const { mkdir, readFile, writeFile } = require('fs/promises');
 const { dirname, join } = require('path');
@@ -29,6 +29,7 @@ if (!hasSingleInstanceLock) {
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+let windowBoundsSaveTimer = null;
 
 const DEFAULT_SETTINGS = {
   closeToTray: true,
@@ -36,6 +37,8 @@ const DEFAULT_SETTINGS = {
   alwaysOnTop: false,
   compatibilityMode: false,
   voiceAccess: false,
+  rememberWindowState: false,
+  windowBounds: null,
   exportPreferences: {
     directory: '',
     includeTimestamp: true,
@@ -46,6 +49,8 @@ const DEFAULT_SETTINGS = {
 };
 
 const PDF_PAGE_SIZES = ['A4', 'Letter'];
+const DEFAULT_WINDOW_BOUNDS = { width: 1280, height: 820 };
+const MIN_WINDOW_SIZE = { width: 980, height: 640 };
 
 let settings = { ...DEFAULT_SETTINGS };
 let defaultUserAgent = '';
@@ -570,6 +575,72 @@ function normalizeExportPreferences(value = {}) {
   };
 }
 
+function normalizeWindowBounds(value) {
+  if (!value || !Number.isInteger(value.x) || !Number.isInteger(value.y) ||
+    !Number.isInteger(value.width) || !Number.isInteger(value.height) ||
+    value.width < MIN_WINDOW_SIZE.width || value.height < MIN_WINDOW_SIZE.height) {
+    return null;
+  }
+
+  return {
+    x: value.x,
+    y: value.y,
+    width: value.width,
+    height: value.height
+  };
+}
+
+function isWindowBoundsVisible(bounds) {
+  return screen.getAllDisplays().some(display => {
+    const area = display.workArea;
+    return bounds.x < area.x + area.width && bounds.x + bounds.width > area.x &&
+      bounds.y < area.y + area.height && bounds.y + bounds.height > area.y;
+  });
+}
+
+function getStoredWindowBounds() {
+  const bounds = settings.rememberWindowState ? normalizeWindowBounds(settings.windowBounds) : null;
+  return bounds && isWindowBoundsVisible(bounds) ? bounds : null;
+}
+
+function getCurrentWindowBounds(win) {
+  if (!win || win.isDestroyed() || win.isMinimized()) {
+    return null;
+  }
+
+  return normalizeWindowBounds(win.isMaximized() ? win.getNormalBounds() : win.getBounds());
+}
+
+function persistWindowBounds(win) {
+  if (!settings.rememberWindowState) {
+    return;
+  }
+
+  const bounds = getCurrentWindowBounds(win);
+
+  if (!bounds) {
+    return;
+  }
+
+  settings = { ...settings, windowBounds: bounds };
+  saveSettings().catch(() => {});
+}
+
+function scheduleWindowBoundsSave(win) {
+  if (!settings.rememberWindowState) {
+    return;
+  }
+
+  if (windowBoundsSaveTimer) {
+    clearTimeout(windowBoundsSaveTimer);
+  }
+
+  windowBoundsSaveTimer = setTimeout(() => {
+    windowBoundsSaveTimer = null;
+    persistWindowBounds(win);
+  }, 300);
+}
+
 async function loadSettings() {
   try {
     const rawSettings = await readFile(getSettingsPath(), 'utf8');
@@ -582,6 +653,8 @@ async function loadSettings() {
       alwaysOnTop: typeof parsedSettings.alwaysOnTop === 'boolean' ? parsedSettings.alwaysOnTop : DEFAULT_SETTINGS.alwaysOnTop,
       compatibilityMode: typeof parsedSettings.compatibilityMode === 'boolean' ? parsedSettings.compatibilityMode : DEFAULT_SETTINGS.compatibilityMode,
       voiceAccess: typeof parsedSettings.voiceAccess === 'boolean' ? parsedSettings.voiceAccess : DEFAULT_SETTINGS.voiceAccess,
+      rememberWindowState: typeof parsedSettings.rememberWindowState === 'boolean' ? parsedSettings.rememberWindowState : DEFAULT_SETTINGS.rememberWindowState,
+      windowBounds: normalizeWindowBounds(parsedSettings.windowBounds),
       exportPreferences: normalizeExportPreferences(parsedSettings.exportPreferences)
     };
   } catch (error) {
@@ -595,7 +668,10 @@ async function saveSettings() {
 }
 
 async function updateSetting(key, value) {
-  settings = { ...settings, [key]: value };
+  const windowBounds = key === 'rememberWindowState'
+    ? (value ? getCurrentWindowBounds(mainWindow) : null)
+    : settings.windowBounds;
+  settings = { ...settings, [key]: value, windowBounds };
 
   if (key === 'alwaysOnTop' && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setAlwaysOnTop(value);
@@ -1478,6 +1554,12 @@ function updateTrayMenu() {
           checked: settings.voiceAccess,
           click: () => updateSetting('voiceAccess', !settings.voiceAccess)
         },
+        {
+          label: 'Remember Window Size and Position',
+          type: 'checkbox',
+          checked: settings.rememberWindowState,
+          click: () => updateSetting('rememberWindowState', !settings.rememberWindowState)
+        },
         { type: 'separator' },
         {
           label: 'Export Preferences',
@@ -1543,11 +1625,13 @@ function updateTrayMenu() {
 }
 
 function createWindow(options = {}) {
+  const storedBounds = getStoredWindowBounds();
   const win = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    minWidth: 980,
-    minHeight: 640,
+    width: storedBounds?.width || DEFAULT_WINDOW_BOUNDS.width,
+    height: storedBounds?.height || DEFAULT_WINDOW_BOUNDS.height,
+    ...(storedBounds ? { x: storedBounds.x, y: storedBounds.y } : {}),
+    minWidth: MIN_WINDOW_SIZE.width,
+    minHeight: MIN_WINDOW_SIZE.height,
     autoHideMenuBar: true,
     alwaysOnTop: settings.alwaysOnTop,
     show: options.show ?? !settings.startMinimized,
@@ -1563,6 +1647,9 @@ function createWindow(options = {}) {
   mainWindow = win;
   applyCompatibilityUserAgent(win);
 
+  win.on('moved', () => scheduleWindowBoundsSave(win));
+  win.on('resized', () => scheduleWindowBoundsSave(win));
+
   win.on('close', event => {
     if (!isQuitting && settings.closeToTray) {
       event.preventDefault();
@@ -1571,6 +1658,7 @@ function createWindow(options = {}) {
     }
 
     isQuitting = true;
+    persistWindowBounds(win);
   });
 
   win.on('closed', () => {
