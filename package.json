@@ -4,6 +4,7 @@
   "description": "Extended desktop wrapper for ChatGPT with Markdown and PDF export",
   "homepage": "https://chatgpt.com",
   "main": "main.js",
+  "desktopName": "eu.brainbytez.chatgpt-ex",
   "author": {
     "name": "BrainByteZ"
   },
@@ -18,7 +19,7 @@
     "release:win": "npm run build:win"
   },
   "devDependencies": {
-    "electron": "^43.1.0",
+    "electron": "43.1.0",
     "electron-builder": "^26.0.12"
   },
   "build": {
@@ -40,6 +41,7 @@
       ],
       "icon": "build/icons",
       "executableName": "chatgpt-ex",
+      "syncDesktopName": true,
       "maintainer": "BrainByteZ",
       "category": "Utility"
     },
