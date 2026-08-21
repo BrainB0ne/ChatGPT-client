@@ -603,6 +603,15 @@ function getStoredWindowBounds() {
   return bounds && isWindowBoundsVisible(bounds) ? bounds : null;
 }
 
+function isChatGptUrl(url) {
+  try {
+    const destination = new URL(url);
+    return destination.protocol === 'https:' && destination.hostname === 'chatgpt.com';
+  } catch {
+    return false;
+  }
+}
+
 function getCurrentWindowBounds(win) {
   if (!win || win.isDestroyed() || win.isMinimized()) {
     return null;
@@ -1668,6 +1677,11 @@ function createWindow(options = {}) {
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isChatGptUrl(url)) {
+      win.loadURL(url).catch(() => {});
+      return { action: 'deny' };
+    }
+
     shell.openExternal(url);
     return { action: 'deny' };
   });
