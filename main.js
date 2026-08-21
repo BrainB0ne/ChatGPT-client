@@ -268,6 +268,27 @@ const ACTION_BUTTONS_SCRIPT = `
     return cleanCode.includes(tick) ? tick + tick + ' ' + cleanCode + ' ' + tick + tick : tick + cleanCode + tick;
   }
 
+  function getCodeBlockText(element) {
+    const renderedText = (element.innerText || '').replace(/\\r\\n?/g, '\\n');
+
+    if (renderedText.includes('\\n')) {
+      return renderedText;
+    }
+
+    const clone = element.cloneNode(true);
+
+    for (const lineBreak of clone.querySelectorAll('br')) {
+      lineBreak.replaceWith(document.createTextNode('\\n'));
+    }
+
+    for (const line of clone.querySelectorAll('div, p, li, [class~="line"]')) {
+      line.before(document.createTextNode('\\n'));
+      line.after(document.createTextNode('\\n'));
+    }
+
+    return (clone.textContent || '').replace(/\\r\\n?/g, '\\n').replace(/^\\n+|\\n+$/g, '');
+  }
+
   function linkToMarkdown(link) {
     const href = link.href || link.getAttribute('href') || '';
     const text = cleanText(link.innerText || link.textContent || href);
@@ -331,7 +352,10 @@ const ACTION_BUTTONS_SCRIPT = `
   }
 
   function textWithCodeBlocks(element) {
+    const sourcePreBlocks = element.matches('pre') ? [element] : Array.from(element.querySelectorAll('pre'));
+    const sourceCodeBlocks = sourcePreBlocks.map(pre => getCodeBlockText(pre.querySelector('code') || pre));
     const clone = element.cloneNode(true);
+    const codeBlocks = [];
 
     for (const removable of clone.querySelectorAll('button, svg, form, textarea, script, style, [contenteditable="true"]')) {
       removable.remove();
@@ -367,11 +391,16 @@ const ACTION_BUTTONS_SCRIPT = `
     for (const pre of clone.querySelectorAll('pre')) {
       const code = pre.querySelector('code');
       const language = code?.className?.match(/language-([^\\s]+)/)?.[1] || '';
-      const text = cleanText((code || pre).innerText || '');
-      pre.replaceWith(document.createTextNode('\\n\`\`\`' + language + '\\n' + text + '\\n\`\`\`\\n'));
+      const text = sourceCodeBlocks[codeBlocks.length] || getCodeBlockText(code || pre);
+      const marker = '[[CHATGPT_EX_CODE_BLOCK_' + codeBlocks.length + ']]';
+      codeBlocks.push('\\n\`\`\`' + language + '\\n' + text + '\\n\`\`\`\\n');
+      pre.replaceWith(document.createTextNode(marker));
     }
 
-    return cleanText(clone.innerText || '');
+    return codeBlocks.reduce(
+      (text, codeBlock, index) => text.replace('[[CHATGPT_EX_CODE_BLOCK_' + index + ']]', codeBlock),
+      cleanText(clone.innerText || '')
+    ).trim();
   }
 
   function findRenderedMessages() {
