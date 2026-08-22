@@ -18,9 +18,10 @@ This project is a fork of the original ChatGPT-client application.
 - Right-click context menu with cut, copy, paste, and select-all actions.
 - System tray icon while running; closing the window hides it to the tray.
 - Only one app instance can run; launching it again restores the existing window.
-- Tray menu with show, clear browsing data, about, and quit actions.
-- `Developer Tools (F12)` tray action toggles Chromium DevTools in a detached window.
-- Tray settings for close-to-tray, start minimized, always-on-top behavior, Compatibility Mode, Voice/Microphone Access, and window-state persistence.
+- Tray menu with show, close-to-tray, and quit actions.
+- Native menu bar with File, Settings, View, and Help menus. Export and print actions remain available from the bottom-right action overlay.
+- `Developer Tools (F12)` in the View menu toggles detached Chromium DevTools.
+- Settings menu for close-to-tray, start minimized, always-on-top behavior, Compatibility Mode, Voice/Microphone Access, window-state persistence, and export preferences.
 - ChatGPT links that request a new tab, including Branch in a new chat, stay in the app; external destinations open in the default browser.
 - Spell checking is disabled in the app window.
 

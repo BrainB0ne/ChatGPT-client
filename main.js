@@ -570,6 +570,18 @@ const ACTION_BUTTONS_SCRIPT = `
   toast.setAttribute('role', 'status');
   toast.setAttribute('aria-live', 'polite');
 
+  const actionButtons = {
+    refresh: refreshButton,
+    print: printButton,
+    markdown: exportButton,
+    html: htmlButton,
+    pdf: pdfButton
+  };
+
+  window.addEventListener('chatgpt-ex-action', event => {
+    actionButtons[event.detail]?.click();
+  });
+
   shadow.append(style, toast, actions);
   document.documentElement.appendChild(host);
 })();
@@ -733,6 +745,7 @@ async function updateSetting(key, value) {
   }
 
   updateTrayMenu();
+  updateApplicationMenu();
 }
 
 function applyCompatibilityUserAgent(win) {
@@ -897,6 +910,16 @@ function toggleDevTools() {
 
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
+}
+
+function triggerChatGptAction(action) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.webContents.executeJavaScript(
+    `window.dispatchEvent(new CustomEvent('chatgpt-ex-action', { detail: ${JSON.stringify(action)} }));`
+  ).catch(() => {});
 }
 
 function showAboutDialog() {
@@ -1552,13 +1575,29 @@ function createTray() {
   tray.on('click', showMainWindow);
 }
 
-function updateTrayMenu() {
-  if (!tray) {
-    return;
-  }
-
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Show ChatGPT-EX', click: showMainWindow },
+function updateApplicationMenu() {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: 'File',
+      submenu: [
+        { label: 'Refresh', accelerator: 'F5', click: () => triggerChatGptAction('refresh') },
+        { type: 'separator' },
+        { label: 'Print', click: () => triggerChatGptAction('print') },
+        { label: 'Export Markdown', click: () => triggerChatGptAction('markdown') },
+        { label: 'Export HTML', click: () => triggerChatGptAction('html') },
+        { label: 'Export PDF', click: () => triggerChatGptAction('pdf') },
+        { type: 'separator' },
+        { label: 'Clear Browsing Data', click: clearBrowsingData },
+        { type: 'separator' },
+        {
+          label: 'Quit',
+          click: () => {
+            isQuitting = true;
+            app.quit();
+          }
+        }
+      ]
+    },
     {
       label: 'Settings',
       submenu: [
@@ -1648,9 +1687,34 @@ function updateTrayMenu() {
         }
       ]
     },
-    { label: 'Clear Browsing Data', click: clearBrowsingData },
-    { label: 'Developer Tools (F12)', click: toggleDevTools },
-    { label: 'About', click: showAboutDialog },
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Developer Tools', accelerator: 'F12', click: toggleDevTools }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        { label: 'About', click: showAboutDialog }
+      ]
+    }
+  ]));
+}
+
+function updateTrayMenu() {
+  if (!tray) {
+    return;
+  }
+
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Show ChatGPT-EX', click: showMainWindow },
+    {
+      label: 'Close to Tray',
+      type: 'checkbox',
+      checked: settings.closeToTray,
+      click: () => updateSetting('closeToTray', !settings.closeToTray)
+    },
     { type: 'separator' },
     {
       label: 'Quit',
@@ -1670,7 +1734,7 @@ function createWindow(options = {}) {
     ...(storedBounds ? { x: storedBounds.x, y: storedBounds.y } : {}),
     minWidth: MIN_WINDOW_SIZE.width,
     minHeight: MIN_WINDOW_SIZE.height,
-    autoHideMenuBar: true,
+    autoHideMenuBar: false,
     alwaysOnTop: settings.alwaysOnTop,
     show: options.show ?? !settings.startMinimized,
     webPreferences: {
@@ -1748,6 +1812,7 @@ if (hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     await loadSettings();
     configurePermissionHandlers(session.defaultSession);
+    updateApplicationMenu();
     createWindow();
     createTray();
 
