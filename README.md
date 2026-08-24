@@ -2,7 +2,7 @@
 
 A native Electron desktop wrapper that opens ChatGPT in an app window.
 
-This project is a fork of the original ChatGPT-client application.
+This project is a fork of the unofficial [ChatGPT-client](https://github.com/jfscoertzen/ChatGPT-client) application.
 
 ## Features
 
