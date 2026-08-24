@@ -25,6 +25,9 @@ This project is a fork of the original ChatGPT-client application.
 - ChatGPT links that request a new tab, including Branch in a new chat, stay in the app; external destinations open in the default browser.
 - Spell checking is disabled in the app window.
 
+## Screenshot
+![ChatGPT-EX Screenshot](./screenshots/chatgpt-ex-screenshot.png)
+
 ## Export Preferences
 
 Export preferences are available from the tray menu under `Settings > Export Preferences`.
