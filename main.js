@@ -51,6 +51,14 @@ const DEFAULT_SETTINGS = {
 const PDF_PAGE_SIZES = ['A4', 'Letter'];
 const DEFAULT_WINDOW_BOUNDS = { width: 1280, height: 820 };
 const MIN_WINDOW_SIZE = { width: 980, height: 640 };
+const ALLOWED_IN_APP_HOSTS = [
+  'chatgpt.com',
+  'auth.openai.com',
+  'accounts.google.com',
+  'login.microsoftonline.com',
+  'login.live.com',
+  'appleid.apple.com'
+];
 
 let settings = { ...DEFAULT_SETTINGS };
 let defaultUserAgent = '';
@@ -644,10 +652,11 @@ function getStoredWindowBounds() {
   return bounds && isWindowBoundsVisible(bounds) ? bounds : null;
 }
 
-function isChatGptUrl(url) {
+function isAllowedInAppUrl(url) {
   try {
     const destination = new URL(url);
-    return destination.protocol === 'https:' && destination.hostname === 'chatgpt.com';
+    return destination.protocol === 'https:' &&
+      ALLOWED_IN_APP_HOSTS.includes(destination.hostname);
   } catch {
     return false;
   }
@@ -1770,13 +1779,22 @@ function createWindow(options = {}) {
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (isChatGptUrl(url)) {
+    if (isAllowedInAppUrl(url)) {
       win.loadURL(url).catch(() => {});
       return { action: 'deny' };
     }
 
     shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isAllowedInAppUrl(url)) {
+      return;
+    }
+
+    event.preventDefault();
+    shell.openExternal(url).catch(() => {});
   });
 
   win.webContents.on('before-input-event', (event, input) => {

@@ -23,6 +23,7 @@ This project is a fork of the unofficial [ChatGPT-client](https://github.com/jfs
 - `Developer Tools (F12)` in the View menu toggles detached Chromium DevTools.
 - Settings menu for close-to-tray, start minimized, always-on-top behavior, Compatibility Mode, Voice/Microphone Access, window-state persistence, and export preferences.
 - ChatGPT links that request a new tab, including Branch in a new chat, stay in the app; external destinations open in the default browser.
+- In-window navigation is limited to ChatGPT, OpenAI authentication, and official Google, Microsoft, and Apple sign-in pages; other destinations open in the default browser.
 - Spell checking is disabled in the app window.
 
 ## Screenshot
