@@ -931,6 +931,31 @@ function triggerChatGptAction(action) {
   ).catch(() => {});
 }
 
+function canNavigateHistory(direction) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+
+  const history = mainWindow.webContents.navigationHistory;
+  return direction === 'back' ? history.canGoBack() : history.canGoForward();
+}
+
+function navigateHistory(direction) {
+  if (!canNavigateHistory(direction)) {
+    return;
+  }
+
+  const history = mainWindow.webContents.navigationHistory;
+
+  if (direction === 'back') {
+    history.goBack();
+  } else {
+    history.goForward();
+  }
+
+  updateApplicationMenu();
+}
+
 function showAboutDialog() {
   dialog.showMessageBox(getDialogParent(), {
     type: 'info',
@@ -1589,6 +1614,19 @@ function updateApplicationMenu() {
     {
       label: 'File',
       submenu: [
+        {
+          label: 'Back',
+          accelerator: 'Alt+Left',
+          enabled: canNavigateHistory('back'),
+          click: () => navigateHistory('back')
+        },
+        {
+          label: 'Forward',
+          accelerator: 'Alt+Right',
+          enabled: canNavigateHistory('forward'),
+          click: () => navigateHistory('forward')
+        },
+        { type: 'separator' },
         { label: 'Refresh', accelerator: 'F5', click: () => triggerChatGptAction('refresh') },
         { type: 'separator' },
         { label: 'Print', click: () => triggerChatGptAction('print') },
@@ -1796,6 +1834,9 @@ function createWindow(options = {}) {
     event.preventDefault();
     shell.openExternal(url).catch(() => {});
   });
+
+  win.webContents.on('did-navigate', updateApplicationMenu);
+  win.webContents.on('did-navigate-in-page', updateApplicationMenu);
 
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && input.key === 'F5') {

@@ -20,6 +20,7 @@ This project is a fork of the unofficial [ChatGPT-client](https://github.com/jfs
 - Only one app instance can run; launching it again restores the existing window.
 - Tray menu with show, close-to-tray, and quit actions.
 - Native menu bar with File, Settings, View, and Help menus. Export and print actions remain available from the bottom-right action overlay.
+- File menu navigation controls for Back (`Alt+Left`) and Forward (`Alt+Right`).
 - `Developer Tools (F12)` in the View menu toggles detached Chromium DevTools.
 - Settings menu for close-to-tray, start minimized, always-on-top behavior, Compatibility Mode, Voice/Microphone Access, window-state persistence, and export preferences.
 - ChatGPT links that request a new tab, including Branch in a new chat, stay in the app; external destinations open in the default browser.
