@@ -10,8 +10,20 @@ if (!scriptSource) {
   throw new Error('Export script not found.');
 }
 
+const pdfRendererSource = mainSource.match(/function renderPdfMessage\(message\) \{[\s\S]*?\n\}/)?.[0];
+
+if (!pdfRendererSource) {
+  throw new Error('PDF/HTML code block renderer not found.');
+}
+
+const renderPdfMessage = runInNewContext('(' + pdfRendererSource + ')', {
+  renderPdfText: text => text,
+  escapeHtml: value => String(value)
+});
+
 const actionScript = runInNewContext('`' + scriptSource[1] + '`')
   .replace(/'__(?:MARKDOWN|HTML|PDF|PRINT|RELOAD)_ICON__'/g, JSON.stringify('<svg xmlns="http://www.w3.org/2000/svg"></svg>'));
+const tripleTicks = String.fromCharCode(96).repeat(3);
 
 const fixtures = [
   {
@@ -20,7 +32,8 @@ const fixtures = [
       <article data-turn-id="first" data-turn-role="user"><div data-testid="user-message">Question</div></article>
       <article data-turn-id="second" data-turn-role="assistant"><div data-message-id="empty"></div><div class="markdown"><p>Answer</p><pre><code class="language-js">const a = 1;\nconst b = 2;</code></pre></div></article>
     </main>`,
-    expected: ['Question', 'Answer', 'const a = 1;\nconst b = 2;']
+    expected: ['Question', 'Answer', 'const a = 1;\nconst b = 2;'],
+    expectedCodeFence: '```js\nconst a = 1;\nconst b = 2;\n```'
   },
   {
     name: 'message articles without legacy turn selectors',
@@ -82,6 +95,24 @@ const fixtures = [
     expected: ['Old section prompt', 'Old section reply'],
     expectedAfterSwitch: ['New section prompt', 'New section reply'],
     excludedAfterSwitch: ['Old section prompt', 'Old section reply']
+  },
+  {
+    name: 'multiline code without a pre wrapper',
+    html: `<main>
+      <article data-turn-role="user" data-turn-id="prompt"><div data-user-message-bubble>Show code</div></article>
+      <article data-turn-role="assistant" data-turn-id="reply"><div class="markdown"><p>Inline <code>small</code> example.</p><div class="code-block"><code class="language-js"><span class="line">const first = 1;</span><span class="line">const second = 2;</span></code></div></div></article>
+    </main>`,
+    expected: ['Show code', 'Inline `small` example.', 'const first = 1;', 'const second = 2;'],
+    expectedCodeFence: '```js\nconst first = 1;\nconst second = 2;\n```'
+  },
+  {
+    name: 'code containing Markdown fences',
+    html: `<main>
+      <article data-turn-id="prompt" data-turn-role="user">Show literal backticks</article>
+      <article data-turn-id="reply" data-turn-role="assistant"><div class="markdown"><pre><code class="language-js">const fence = "${tripleTicks}";\nconsole.log(fence);</code></pre></div></article>
+    </main>`,
+    expected: ['Show literal backticks', `const fence = "${tripleTicks}";\nconsole.log(fence);`],
+    expectedCodeFence: `${String.fromCharCode(96).repeat(4)}js\nconst fence = "${tripleTicks}";\nconsole.log(fence);\n${String.fromCharCode(96).repeat(4)}`
   }
 ];
 
@@ -137,6 +168,15 @@ app.whenReady().then(async () => {
 
           if (excluded?.some(fragment => text.includes(fragment))) {
             throw new Error(`${fixture.name}: ${action} included non-message UI text.`);
+          }
+
+          if (fixture.expectedCodeFence && !text.includes(fixture.expectedCodeFence)) {
+            throw new Error(`${fixture.name}: ${action} did not preserve a fenced code block.`);
+          }
+
+          if (fixture.expectedCodeFence && action !== 'markdown' &&
+            !renderPdfMessage(exported.messages[1]).includes('<pre><code>')) {
+            throw new Error(`${fixture.name}: ${action} did not render the fenced code block.`);
           }
 
           const roles = fixture.roles || ['User', 'Assistant'];

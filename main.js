@@ -276,6 +276,14 @@ const ACTION_BUTTONS_SCRIPT = `
     return cleanCode.includes(tick) ? tick + tick + ' ' + cleanCode + ' ' + tick + tick : tick + cleanCode + tick;
   }
 
+  function fencedCodeToMarkdown(text, language = '') {
+    const code = text.replace(/\\n+$/g, '');
+    const tick = String.fromCharCode(96);
+    const longestRun = Math.max(0, ...(code.match(new RegExp(tick + '+', 'g')) || []).map(run => run.length));
+    const fence = tick.repeat(Math.max(3, longestRun + 1));
+    return '\\n' + fence + language + '\\n' + code + '\\n' + fence + '\\n';
+  }
+
   function getCodeBlockText(element) {
     const renderedText = (element.innerText || '').replace(/\\r\\n?/g, '\\n');
 
@@ -290,7 +298,6 @@ const ACTION_BUTTONS_SCRIPT = `
     }
 
     for (const line of clone.querySelectorAll('div, p, li, [class~="line"]')) {
-      line.before(document.createTextNode('\\n'));
       line.after(document.createTextNode('\\n'));
     }
 
@@ -362,6 +369,7 @@ const ACTION_BUTTONS_SCRIPT = `
   function textWithCodeBlocks(element) {
     const sourcePreBlocks = element.matches('pre') ? [element] : Array.from(element.querySelectorAll('pre'));
     const sourceCodeBlocks = sourcePreBlocks.map(pre => getCodeBlockText(pre.querySelector('code') || pre));
+    const sourceCodes = Array.from(element.querySelectorAll('code'));
     const clone = element.cloneNode(true);
     const codeBlocks = [];
 
@@ -375,9 +383,18 @@ const ACTION_BUTTONS_SCRIPT = `
       }
     }
 
-    for (const code of clone.querySelectorAll('code')) {
+    for (const [index, code] of Array.from(clone.querySelectorAll('code')).entries()) {
       if (!code.closest('pre')) {
-        code.replaceWith(document.createTextNode(inlineCodeToMarkdown(code.innerText || code.textContent || '')));
+        const text = getCodeBlockText(sourceCodes[index] || code);
+
+        if (text.includes('\\n')) {
+          const language = code.className?.match(/language-([^\\s]+)/)?.[1] || '';
+          const marker = '[[CHATGPT_EX_CODE_BLOCK_' + codeBlocks.length + ']]';
+          codeBlocks.push(fencedCodeToMarkdown(text, language));
+          code.replaceWith(document.createTextNode(marker));
+        } else {
+          code.replaceWith(document.createTextNode(inlineCodeToMarkdown(text)));
+        }
       }
     }
 
@@ -402,12 +419,12 @@ const ACTION_BUTTONS_SCRIPT = `
       }
     }
 
-    for (const pre of clone.querySelectorAll('pre')) {
+    for (const [index, pre] of Array.from(clone.querySelectorAll('pre')).entries()) {
       const code = pre.querySelector('code');
       const language = code?.className?.match(/language-([^\\s]+)/)?.[1] || '';
-      const text = sourceCodeBlocks[codeBlocks.length] || getCodeBlockText(code || pre);
+      const text = sourceCodeBlocks[index] || getCodeBlockText(code || pre);
       const marker = '[[CHATGPT_EX_CODE_BLOCK_' + codeBlocks.length + ']]';
-      codeBlocks.push('\\n\`\`\`' + language + '\\n' + text + '\\n\`\`\`\\n');
+      codeBlocks.push(fencedCodeToMarkdown(text, language));
       pre.replaceWith(document.createTextNode(marker));
     }
 
@@ -1371,7 +1388,7 @@ function renderPdfText(text) {
 
 function renderPdfMessage(message) {
   const parts = [];
-  const codeFencePattern = /```([^\n`]*)\n([\s\S]*?)```/g;
+  const codeFencePattern = /(^|\n)(`{3,})([^\n`]*)\n([\s\S]*?)\n\2(?=\n|$)/g;
   let lastIndex = 0;
   let match;
 
@@ -1382,8 +1399,8 @@ function renderPdfMessage(message) {
       parts.push(renderPdfText(textBeforeCode));
     }
 
-    const language = match[1].trim();
-    const code = match[2].replace(/^\n+|\n+$/g, '');
+    const language = match[3].trim();
+    const code = match[4].replace(/^\n+|\n+$/g, '');
     parts.push(`
       <div class="code-block">
         ${language ? `<div class="code-language">${escapeHtml(language)}</div>` : ''}
