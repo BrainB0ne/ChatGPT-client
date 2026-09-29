@@ -13,6 +13,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
+    "test:export": "electron scripts/test-export-extraction.js",
     "build:linux": "electron-builder --linux --publish never",
     "build:win": "electron-builder --win --publish never",
     "release:linux": "npm run build:linux",

@@ -7,7 +7,7 @@
 - Build Linux artifacts with `npm run build:linux` or `npm run release:linux`; outputs go to ignored `dist/` as AppImage and deb packages.
 - Build Windows artifacts with `npm run build:win` or `npm run release:win`; configured targets are NSIS installer and portable exe.
 - Windows config disables built-in exe resource editing and uses `scripts/after-pack-win.js` to run the split `rcedit` bundle for `ChatGPT-EX.exe` icon and display metadata updates.
-- There are no configured lint, test, formatter, or typecheck scripts in `package.json`.
+- Run export extraction regression fixtures with `npm run test:export`. There are no configured lint, formatter, or typecheck scripts.
 
 ## App Structure
 - `package.json` sets Electron's main entrypoint to `main.js`; keep packaged runtime files in `build.files` if adding new required files.

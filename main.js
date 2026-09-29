@@ -318,7 +318,7 @@ const ACTION_BUTTONS_SCRIPT = `
     const rows = Array.from(table.querySelectorAll('tr'))
       .map(row => Array.from(row.children)
         .filter(cell => ['TH', 'TD'].includes(cell.tagName))
-        .map(cell => escapeMarkdownCell(cell.innerText)))
+        .map(cell => escapeMarkdownCell(cell.innerText || cell.textContent)))
       .filter(row => row.length > 0);
 
     if (rows.length === 0) {
@@ -348,7 +348,7 @@ const ACTION_BUTTONS_SCRIPT = `
 
       const marker = ordered ? (index + 1) + '.' : '-';
       const indent = '  '.repeat(depth);
-      const text = cleanText(itemClone.innerText || '').replace(/\\n/g, ' ');
+      const text = cleanText(itemClone.innerText || itemClone.textContent || '').replace(/\\n/g, ' ');
       const nested = Array.from(item.children)
         .filter(child => ['UL', 'OL'].includes(child.tagName))
         .map(child => listToMarkdown(child, depth + 1))
@@ -365,13 +365,19 @@ const ACTION_BUTTONS_SCRIPT = `
     const clone = element.cloneNode(true);
     const codeBlocks = [];
 
-    for (const removable of clone.querySelectorAll('button, svg, form, textarea, script, style, [contenteditable="true"]')) {
+    for (const removable of clone.querySelectorAll('button, svg, form, textarea, script, style, [contenteditable="true"], [class~="sr-only"], [hidden], [aria-hidden="true"]')) {
       removable.remove();
+    }
+
+    for (const heading of clone.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]')) {
+      if (/^ChatGPT said:?$/i.test(heading.textContent?.trim() || '')) {
+        heading.remove();
+      }
     }
 
     for (const code of clone.querySelectorAll('code')) {
       if (!code.closest('pre')) {
-        code.replaceWith(document.createTextNode(inlineCodeToMarkdown(code.innerText || '')));
+        code.replaceWith(document.createTextNode(inlineCodeToMarkdown(code.innerText || code.textContent || '')));
       }
     }
 
@@ -389,7 +395,7 @@ const ACTION_BUTTONS_SCRIPT = `
 
     for (const heading of clone.querySelectorAll('h1, h2, h3, h4, h5, h6')) {
       const level = Number(heading.tagName.slice(1));
-      const text = cleanText(heading.innerText || '');
+      const text = cleanText(heading.innerText || heading.textContent || '');
 
       if (text) {
         heading.replaceWith(document.createTextNode('\\n' + '#'.repeat(level) + ' ' + text + '\\n'));
@@ -405,26 +411,92 @@ const ACTION_BUTTONS_SCRIPT = `
       pre.replaceWith(document.createTextNode(marker));
     }
 
+    for (const lineBreak of clone.querySelectorAll('br')) {
+      lineBreak.replaceWith(document.createTextNode('\\n'));
+    }
+
+    for (const block of clone.querySelectorAll('p, li, blockquote, h1, h2, h3, h4, h5, h6')) {
+      block.after(document.createTextNode('\\n\\n'));
+    }
+
+    for (const container of clone.querySelectorAll('div, section')) {
+      container.after(document.createTextNode('\\n'));
+    }
+
+    const renderedText = cleanText(clone.textContent || '');
     return codeBlocks.reduce(
       (text, codeBlock, index) => text.replace('[[CHATGPT_EX_CODE_BLOCK_' + index + ']]', codeBlock),
-      cleanText(clone.innerText || '')
+      renderedText
     ).trim();
   }
 
-  function findRenderedMessages() {
-    const roleNodes = Array.from(document.querySelectorAll('[data-message-author-role]'));
+  function findRenderedMessages(isRenderedNode) {
+    const visibleMains = Array.from(document.querySelectorAll('main')).filter(isRenderedNode);
+    const conversation = visibleMains.filter(node => node.querySelector('[data-user-message-bubble], [data-testid^="conversation-turn"], [data-turn-id], [data-message-author-role], .markdown')).at(-1) ||
+      visibleMains.at(-1) || document;
+    const turnNodes = Array.from(conversation.querySelectorAll('[data-testid^="conversation-turn"], [data-turn-id]')).filter(isRenderedNode);
+    const turns = turnNodes.filter(node => !turnNodes.some(other => other !== node && other.contains(node)));
+    const roleNodes = Array.from(conversation.querySelectorAll('[data-message-author-role], [data-turn-role]')).filter(isRenderedNode);
+    const articles = Array.from(conversation.querySelectorAll('article'))
+      .filter(node => isRenderedNode(node) && node.querySelector('.markdown, [data-message-id], [data-testid="user-message"], [data-testid="assistant-message"]'));
+    const messageNodes = Array.from(conversation.querySelectorAll('[data-testid="user-message"], [data-testid="assistant-message"]')).filter(isRenderedNode);
+    const groups = [turns, roleNodes, articles, messageNodes];
 
-    if (roleNodes.length > 0) {
-      return roleNodes.map(node => ({
-        role: node.getAttribute('data-message-author-role') || 'message',
-        node
-      }));
+    const candidates = groups.map(nodes => nodes.map((node, index) => {
+      const author = node.matches('[data-message-author-role], [data-turn-role], [data-testid="user-message"], [data-testid="assistant-message"]')
+        ? node
+        : node.querySelector('[data-message-author-role], [data-turn-role], [data-testid="user-message"], [data-testid="assistant-message"]');
+      const role = author?.getAttribute('data-message-author-role') || author?.getAttribute('data-turn-role') ||
+        (author?.getAttribute('data-testid') === 'user-message' ? 'user' : '') ||
+        (author?.getAttribute('data-testid') === 'assistant-message' ? 'assistant' : '') ||
+        (node.getAttribute('data-testid')?.startsWith('conversation-turn-') ? (index % 2 === 0 ? 'user' : 'assistant') : 'message');
+      return { role, node };
+    }));
+
+    const bubbles = Array.from(conversation.querySelectorAll('[data-user-message-bubble]')).filter(isRenderedNode);
+
+    if (bubbles.length > 0) {
+      const assistantBlocks = Array.from(conversation.querySelectorAll('[data-testid="assistant-message"], .markdown, [class~="prose"]'))
+        .filter(node => isRenderedNode(node) && !node.closest('form, [contenteditable="true"], nav, aside, [data-user-message-bubble]'));
+      const blocks = [...bubbles.map(node => ({ role: 'user', node })),
+        ...assistantBlocks.map(node => ({ role: 'assistant', node }))];
+
+      for (const [index, bubble] of bubbles.entries()) {
+        const nextBubble = bubbles[index + 1];
+        const hasAssistant = assistantBlocks.some(node =>
+          bubble.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING &&
+          (!nextBubble || node.compareDocumentPosition(nextBubble) & Node.DOCUMENT_POSITION_FOLLOWING));
+
+        if (hasAssistant) {
+          continue;
+        }
+
+        for (let ancestor = bubble; ancestor && ancestor !== conversation; ancestor = ancestor.parentElement) {
+          let sibling = ancestor.nextElementSibling;
+
+          while (sibling && (!nextBubble || !sibling.contains(nextBubble))) {
+            if (isRenderedNode(sibling) && !sibling.matches('form, nav, aside, header, footer') && textWithCodeBlocks(sibling)) {
+              blocks.push({ role: 'assistant', node: sibling });
+              break;
+            }
+
+            sibling = sibling.nextElementSibling;
+          }
+
+          if (blocks.some(block => block.role === 'assistant' &&
+            bubble.compareDocumentPosition(block.node) & Node.DOCUMENT_POSITION_FOLLOWING &&
+            (!nextBubble || block.node.compareDocumentPosition(nextBubble) & Node.DOCUMENT_POSITION_FOLLOWING))) {
+            break;
+          }
+        }
+      }
+
+      candidates.push(blocks
+        .filter(({ node }) => !blocks.some(other => other.node !== node && other.node.contains(node)))
+        .sort((first, second) => first.node.compareDocumentPosition(second.node) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
     }
 
-    return Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"]')).map((node, index) => ({
-      role: index % 2 === 0 ? 'user' : 'assistant',
-      node
-    }));
+    return candidates;
   }
 
   async function getCurrentChatTitle() {
@@ -442,18 +514,51 @@ const ACTION_BUTTONS_SCRIPT = `
   }
 
   async function getConversationExport() {
-    const messages = findRenderedMessages()
-      .map(({ role, node }) => {
-        const contentNode = node.querySelector('.markdown, [data-message-id]') || node;
-        return {
-          role: role === 'assistant' ? 'Assistant' : role === 'user' ? 'User' : 'Message',
-          text: textWithCodeBlocks(contentNode)
-        };
-      })
-      .filter(message => message.text);
+    const visibilityCache = new WeakMap();
+
+    function isRenderedNode(node) {
+      if (!node || node.nodeType !== Node.ELEMENT_NODE) {
+        return true;
+      }
+
+      if (!node.isConnected) {
+        return false;
+      }
+
+      if (visibilityCache.has(node)) {
+        return visibilityCache.get(node);
+      }
+
+      const style = window.getComputedStyle(node);
+      const visible = !node.hidden && !node.inert && node.getAttribute('aria-hidden') !== 'true' &&
+        style.display !== 'none' && style.visibility !== 'hidden' && style.visibility !== 'collapse' &&
+        style.contentVisibility !== 'hidden' && isRenderedNode(node.parentElement);
+      visibilityCache.set(node, visible);
+      return visible;
+    }
+
+    const messageGroups = findRenderedMessages(isRenderedNode);
+    const messages = messageGroups.map(group => group.map(({ role, node }) => {
+      const contentNode = Array.from(node.querySelectorAll('.markdown, [data-testid="user-message"], [data-testid="assistant-message"], [data-message-id]'))
+        .find(candidate => isRenderedNode(candidate) && (candidate.innerText?.trim() || candidate.textContent?.trim())) || node;
+      const text = textWithCodeBlocks(contentNode) || (contentNode !== node ? textWithCodeBlocks(node) : '');
+      return {
+        role: role === 'assistant' ? 'Assistant' : role === 'user' ? 'User' : 'Message',
+        text
+      };
+    }).filter(message => message.text)).reduce((best, group) => group.length > best.length ? group : best, []);
 
     if (messages.length === 0) {
-      throw new Error('No rendered ChatGPT messages were found to export.');
+      throw new Error('No rendered ChatGPT messages were found to export. ' +
+        '(turns: ' + document.querySelectorAll('[data-testid^="conversation-turn"], [data-turn-id]').length +
+        ', user bubbles: ' + document.querySelectorAll('[data-user-message-bubble]').length +
+        ', assistant blocks: ' + document.querySelectorAll('.markdown, [class~="prose"], [data-testid="assistant-message"]').length + ').');
+    }
+
+    if (messages.every(message => message.role === 'User')) {
+      throw new Error('Only user messages were found; the assistant replies could not be identified. ' +
+        '(user bubbles: ' + document.querySelectorAll('[data-user-message-bubble]').length +
+        ', assistant blocks: ' + document.querySelectorAll('.markdown, [class~="prose"], [data-testid="assistant-message"]').length + ').');
     }
 
     const title = await getCurrentChatTitle();
