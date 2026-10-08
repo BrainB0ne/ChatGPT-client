@@ -373,7 +373,7 @@ const ACTION_BUTTONS_SCRIPT = `
     const clone = element.cloneNode(true);
     const codeBlocks = [];
 
-    for (const removable of clone.querySelectorAll('button, svg, form, textarea, script, style, [contenteditable="true"], [class~="sr-only"], [hidden], [aria-hidden="true"]')) {
+    for (const removable of clone.querySelectorAll('button, svg, form, textarea, script, style, [data-chatgpt-ex-selection-control], [contenteditable="true"], [class~="sr-only"], [hidden], [aria-hidden="true"]')) {
       removable.remove();
     }
 
@@ -530,7 +530,7 @@ const ACTION_BUTTONS_SCRIPT = `
       .replace(/\\s*[-|]\\s*ChatGPT$/i, '') || 'ChatGPT conversation';
   }
 
-  async function getConversationExport() {
+  function getRenderedMessageEntries() {
     const visibilityCache = new WeakMap();
 
     function isRenderedNode(node) {
@@ -556,10 +556,12 @@ const ACTION_BUTTONS_SCRIPT = `
 
     const messageGroups = findRenderedMessages(isRenderedNode);
     const messages = messageGroups.map(group => group.map(({ role, node }) => {
-      const contentNode = Array.from(node.querySelectorAll('.markdown, [data-testid="user-message"], [data-testid="assistant-message"], [data-message-id]'))
+      const contentNode = Array.from(node.querySelectorAll('.markdown, [class~="prose"], [data-user-message-bubble], [data-testid="user-message"], [data-testid="assistant-message"], [data-message-id]'))
         .find(candidate => isRenderedNode(candidate) && (candidate.innerText?.trim() || candidate.textContent?.trim())) || node;
       const text = textWithCodeBlocks(contentNode) || (contentNode !== node ? textWithCodeBlocks(node) : '');
       return {
+        node,
+        contentNode,
         role: role === 'assistant' ? 'Assistant' : role === 'user' ? 'User' : 'Message',
         text
       };
@@ -578,6 +580,154 @@ const ACTION_BUTTONS_SCRIPT = `
         ', assistant blocks: ' + document.querySelectorAll('.markdown, [class~="prose"], [data-testid="assistant-message"]').length + ').');
     }
 
+    return messages;
+  }
+
+  let selectionActive = false;
+  let selectionEditing = false;
+  let selectionRoute = window.location.pathname;
+  const selectedMessages = new Set();
+  const nodeKeys = new WeakMap();
+  let nextNodeKey = 0;
+  let selectionMessageKeys = new Set();
+  let selectionDoneButton;
+  const selectionControls = new Map();
+  const selectionCheckboxes = new WeakMap();
+  const selectionPanel = document.createElement('div');
+  selectionPanel.style.cssText = 'position:fixed;bottom:36px;right:88px;background:#111827;color:white;padding:12px;border-radius:8px;font:13px system-ui;display:none;max-width:320px;z-index:2147483647';
+  const selectionCount = document.createElement('div');
+  selectionCount.setAttribute('role', 'status');
+  selectionCount.setAttribute('aria-live', 'polite');
+  selectionPanel.appendChild(selectionCount);
+
+  function messageKey(message) {
+    const owner = message.node.closest('[data-turn-id], [data-message-id]');
+    const id = owner?.getAttribute('data-message-id') || owner?.getAttribute('data-turn-id') ||
+      message.node.querySelector('[data-message-id]')?.getAttribute('data-message-id');
+    if (id) return message.role + ':' + id;
+    if (!nodeKeys.has(message.node)) nodeKeys.set(message.node, 'node:' + nextNodeKey++);
+    return nodeKeys.get(message.node);
+  }
+
+  function resetSelection() {
+    selectionActive = false;
+    selectionEditing = false;
+    selectedMessages.clear();
+    selectionMessageKeys.clear();
+    selectionControls.forEach(control => control.remove());
+    selectionControls.clear();
+    selectionPanel.style.display = 'none';
+  }
+
+  function reconcileSelection() {
+    if (selectionRoute !== window.location.pathname) {
+      selectionRoute = window.location.pathname;
+      resetSelection();
+    }
+    if (!selectionActive) return [];
+    let entries;
+    try { entries = getRenderedMessageEntries(); } catch { entries = []; }
+    const keys = new Set(entries.map(messageKey));
+    if (keys.size && selectionMessageKeys.size && !Array.from(keys).some(key => selectionMessageKeys.has(key))) {
+      resetSelection();
+      return entries;
+    }
+    selectionMessageKeys = keys;
+    // Drop stale selection when a chat section is replaced, even without a route change.
+    for (const key of selectedMessages) if (!keys.has(key)) selectedMessages.delete(key);
+    selectionCount.textContent = 'Selected: ' + entries.filter(message => selectedMessages.has(messageKey(message))).length +
+      ' messages — exports use this selection';
+    selectionPanel.style.display = 'block';
+    if (selectionDoneButton) selectionDoneButton.textContent = selectionEditing ? 'Done' : 'Edit Selection';
+    for (const [key, control] of selectionControls) {
+      if (!keys.has(key) || !selectionEditing) {
+        control.remove();
+        selectionControls.delete(key);
+      }
+    }
+    if (!selectionEditing) return entries;
+    entries.forEach((message, index) => {
+      const key = messageKey(message);
+      const anchor = message.contentNode;
+      let control = selectionControls.get(key);
+      if (control && control.parentElement !== anchor) {
+        control.remove();
+        selectionControls.delete(key);
+        control = null;
+      }
+      if (!control) {
+        for (const staleControl of message.node.querySelectorAll('[data-chatgpt-ex-selection-control]')) {
+          staleControl.remove();
+        }
+        control = document.createElement('div');
+        control.setAttribute('data-chatgpt-ex-selection-control', '');
+        control.style.cssText = 'display:block;position:static;margin:0 0 8px;flex-basis:100%;width:100%;box-sizing:border-box;clear:both;text-align:' +
+          (message.role === 'User' ? 'right' : 'left') + ';color-scheme:light dark;';
+        const controlShadow = control.attachShadow({ mode: 'closed' });
+        const controlStyle = document.createElement('style');
+        controlStyle.textContent = 'label { display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid #94a3b8;border-radius:6px;font:12px/1.4 system-ui;color:inherit;cursor:pointer; } input { margin:0;accent-color:#2563eb;cursor:pointer; } label:has(input:checked) { border-color:#2563eb;background:rgba(37,99,235,.12); } label:focus-within { outline:2px solid #2563eb;outline-offset:2px; }';
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.setAttribute('aria-label', 'Select ' + message.role + ' message ' + (index + 1));
+        label.append(checkbox, document.createTextNode('Select ' + message.role));
+        controlShadow.append(controlStyle, label);
+        selectionCheckboxes.set(control, checkbox);
+        checkbox.addEventListener('change', () => {
+          const current = getRenderedMessageEntries();
+          const position = current.findIndex(entry => messageKey(entry) === key);
+          if (checkbox.checked) {
+            selectedMessages.add(key);
+            if (current[position]?.role === 'User' && current[position + 1]?.role === 'Assistant') {
+              selectedMessages.add(messageKey(current[position + 1]));
+            }
+          } else {
+            selectedMessages.delete(key);
+          }
+          reconcileSelection();
+        });
+        selectionControls.set(key, control);
+        anchor.prepend(control);
+      }
+      const checkbox = selectionCheckboxes.get(control);
+      checkbox.checked = selectedMessages.has(key);
+      checkbox.setAttribute('aria-label', 'Select ' + message.role + ' message ' + (index + 1));
+    });
+    return entries;
+  }
+
+  for (const [label, action] of [
+    ['Select All', () => getRenderedMessageEntries().forEach(message => selectedMessages.add(messageKey(message)))],
+    ['Clear', () => selectedMessages.clear()],
+    ['Done', () => { selectionEditing = !selectionEditing; }],
+    ['Cancel', resetSelection]
+  ]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    if (label === 'Done') selectionDoneButton = button;
+    button.style.cssText = 'width:auto;height:auto;padding:6px;margin:4px 4px 0 0;font:12px system-ui';
+    button.addEventListener('click', () => {
+      try { action(); reconcileSelection(); } catch (error) { showToast(error.message); }
+    });
+    selectionPanel.appendChild(button);
+  }
+
+  const selectionTimer = window.setInterval(() => {
+    if (!host.isConnected) {
+      resetSelection();
+      window.clearInterval(selectionTimer);
+      return;
+    }
+    reconcileSelection();
+  }, 500);
+
+  async function getConversationExport() {
+    reconcileSelection();
+    const entries = getRenderedMessageEntries();
+    const messages = entries.filter(message => !selectionActive || selectedMessages.has(messageKey(message)))
+      .map(({ role, text }) => ({ role, text }));
+    if (!messages.length) throw new Error('Select at least one message to export.');
     const title = await getCurrentChatTitle();
     const exportedAt = formatLocalTimestamp(new Date());
 
@@ -709,10 +859,18 @@ const ACTION_BUTTONS_SCRIPT = `
   };
 
   window.addEventListener('chatgpt-ex-action', event => {
+    if (!host.isConnected) return;
+    if (event.detail === 'select-messages') {
+      selectionRoute = window.location.pathname;
+      selectionActive = true;
+      selectionEditing = true;
+      reconcileSelection();
+      return;
+    }
     actionButtons[event.detail]?.click();
   });
 
-  shadow.append(style, toast, actions);
+  shadow.append(style, toast, actions, selectionPanel);
   document.documentElement.appendChild(host);
 })();
 `;
@@ -1750,6 +1908,8 @@ function updateApplicationMenu() {
         },
         { type: 'separator' },
         { label: 'Refresh', accelerator: 'F5', click: () => triggerChatGptAction('refresh') },
+        { type: 'separator' },
+        { label: 'Select Messages...', click: () => triggerChatGptAction('select-messages') },
         { type: 'separator' },
         { label: 'Print', click: () => triggerChatGptAction('print') },
         { label: 'Export Markdown', click: () => triggerChatGptAction('markdown') },
