@@ -1775,7 +1775,8 @@ async function getPdfSavePath() {
 ipcMain.handle('get-export-preferences', () => settings.exportPreferences);
 
 ipcMain.handle('get-window-title', event => {
-  return BrowserWindow.fromWebContents(event.sender)?.getTitle() || '';
+  const title = BrowserWindow.fromWebContents(event.sender)?.getTitle() || '';
+  return title === 'ChatGPT-EX' ? 'ChatGPT conversation' : title.replace(/\s+-\s+ChatGPT-EX$/, '');
 });
 
 ipcMain.handle('save-markdown-export', async (_event, markdown) => {
@@ -2058,6 +2059,7 @@ function updateTrayMenu() {
 function createWindow(options = {}) {
   const storedBounds = getStoredWindowBounds();
   const win = new BrowserWindow({
+    title: 'ChatGPT-EX',
     width: storedBounds?.width || DEFAULT_WINDOW_BOUNDS.width,
     height: storedBounds?.height || DEFAULT_WINDOW_BOUNDS.height,
     ...(storedBounds ? { x: storedBounds.x, y: storedBounds.y } : {}),
@@ -2077,6 +2079,14 @@ function createWindow(options = {}) {
 
   mainWindow = win;
   applyCompatibilityUserAgent(win);
+
+  win.on('page-title-updated', (event, title) => {
+    event.preventDefault();
+    const subject = title.trim().replace(/\s+-\s+ChatGPT-EX$/, '');
+    win.setTitle(!subject || subject === 'ChatGPT' || subject === 'ChatGPT-EX'
+      ? 'ChatGPT-EX'
+      : `${subject} - ChatGPT-EX`);
+  });
 
   win.on('moved', () => scheduleWindowBoundsSave(win));
   win.on('resized', () => scheduleWindowBoundsSave(win));
