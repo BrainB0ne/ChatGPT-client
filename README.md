@@ -66,6 +66,8 @@ Joplin exports create a **new Markdown note** each time; existing notes are not 
 3. Click **Test Connection / Load Notebooks**, choose a destination notebook, and click **Save**. Leave the notebook as **Joplin default** to let Joplin choose it.
 4. Choose **File > Send to Joplin**. Keep Joplin running while sending notes.
 
+**Send to Joplin** is disabled until a valid local service URL and usable API token are saved. The menu updates when you save Joplin settings.
+
 The note uses the current chat title, selected messages (if selection is active), and the timestamp/role-heading export preferences. No Markdown file or save dialog is needed. A notification confirms note creation; connection or authorization errors are displayed.
 
 Only local HTTP service URLs are allowed. The API token is encrypted with Electron's `safeStorage` before it is written to `userData/settings.json`: Windows uses DPAPI, macOS uses Keychain, and Linux requires a supported system keyring. The app refuses insecure fallback storage. Existing plaintext tokens are migrated on startup; if encryption is unavailable, the plaintext token is removed and must be re-entered once secure storage is available.

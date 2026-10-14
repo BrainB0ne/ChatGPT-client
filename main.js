@@ -1855,6 +1855,7 @@ ipcMain.handle('joplin-settings-save', async (event, config) => {
     settings.joplin = validated;
     try { await saveSettings(); } catch (error) { settings.joplin = previous; throw error; }
     joplinTokenError = '';
+    updateApplicationMenu();
     return {};
   } catch (error) { return { error: error.message }; }
 });
@@ -1986,6 +1987,15 @@ function createTray() {
   tray.on('click', showMainWindow);
 }
 
+function isJoplinConfigured() {
+  try {
+    validateJoplinSettings(settings.joplin);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function updateApplicationMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     {
@@ -2012,7 +2022,7 @@ function updateApplicationMenu() {
         { label: 'Export Markdown', click: () => triggerChatGptAction('markdown') },
         { label: 'Export HTML', click: () => triggerChatGptAction('html') },
         { label: 'Export PDF', click: () => triggerChatGptAction('pdf') },
-        { label: 'Send to Joplin', click: () => triggerChatGptAction('joplin') },
+        { label: 'Send to Joplin', enabled: isJoplinConfigured(), click: () => triggerChatGptAction('joplin') },
         { type: 'separator' },
         { label: 'Clear Browsing Data', click: clearBrowsingData },
         { type: 'separator' },
