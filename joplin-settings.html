@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'">
+  <title>Joplin Settings</title>
+  <style>
+    :root { color-scheme: light dark; font: 14px system-ui; }
+    body { margin: 24px; } label { display: block; margin: 16px 0; }
+    input, select { display: block; box-sizing: border-box; width: 100%; padding: 8px; margin-top: 6px; }
+    button { padding: 8px 12px; margin-right: 8px; } #status { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <p>Enable the Web Clipper service in Joplin's options and copy its authorization token below.</p>
+  <form id="settings">
+    <label>Service URL<input id="url" required value="http://127.0.0.1:41184"></label>
+    <label>API token<input id="token" type="password" required autocomplete="off"></label>
+    <button id="connect" type="button">Test Connection / Load Notebooks</button>
+    <label>Destination notebook<select id="notebook"><option value="">Joplin default</option></select></label>
+    <p>The token is encrypted using your operating system's credential protection. Leave the token blank to keep an existing saved token. It is never exposed to the ChatGPT page.</p>
+    <button type="submit">Save</button><button type="button" id="cancel">Cancel</button>
+  </form>
+  <p id="status" role="status"></p>
+  <script src="joplin-settings.js"></script>
+</body>
+</html>

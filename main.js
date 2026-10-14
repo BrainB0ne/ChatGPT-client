@@ -5,10 +5,15 @@
  * License: MIT
  */
 
-const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, screen, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, safeStorage, screen, session, shell } = require('electron');
 const { readFileSync } = require('fs');
 const { mkdir, readFile, writeFile } = require('fs/promises');
 const { dirname, join } = require('path');
+const { DEFAULT_JOPLIN_SETTINGS, normalizeJoplinSettings, validateJoplinSettings, getJoplinNotebooks, createJoplinNote } = require('./joplin');
+let joplinSettingsWindow = null;
+const { createJoplinTokenStore } = require('./joplin-token');
+const joplinTokenStore = createJoplinTokenStore(safeStorage);
+let joplinTokenError = '';
 
 if (process.platform === 'win32') {
   app.setAppUserModelId('eu.brainbytez.chatgpt-ex');
@@ -32,6 +37,7 @@ let isQuitting = false;
 let windowBoundsSaveTimer = null;
 
 const DEFAULT_SETTINGS = {
+  joplin: DEFAULT_JOPLIN_SETTINGS,
   closeToTray: true,
   startMinimized: false,
   alwaysOnTop: false,
@@ -734,8 +740,8 @@ const ACTION_BUTTONS_SCRIPT = `
     return { title, exportedAt, messages };
   }
 
-  async function buildMarkdown(options = {}) {
-    const { title, exportedAt, messages } = await getConversationExport();
+  async function buildMarkdown(options = {}, conversation = null) {
+    const { title, exportedAt, messages } = conversation || await getConversationExport();
     const includeTimestamp = options.includeTimestamp !== false;
     const includeRoleHeadings = options.includeRoleHeadings !== false;
     const header = ['# ' + title];
@@ -860,6 +866,21 @@ const ACTION_BUTTONS_SCRIPT = `
 
   window.addEventListener('chatgpt-ex-action', event => {
     if (!host.isConnected) return;
+    if (event.detail === 'joplin') {
+      if (host.dataset.joplinBusy) return;
+      host.dataset.joplinBusy = 'true';
+      (async () => {
+        const conversation = await getConversationExport();
+        const preferences = await window.chatgptDesktop.getExportPreferences();
+        await window.chatgptDesktop.sendToJoplin({
+          title: conversation.title,
+          markdown: await buildMarkdown(preferences, conversation)
+        });
+        showToast('New note created in Joplin.');
+      })().catch(error => window.alert(error.message || 'Failed to send to Joplin.'))
+        .finally(() => { delete host.dataset.joplinBusy; });
+      return;
+    }
     if (event.detail === 'select-messages') {
       selectionRoute = window.location.pathname;
       selectionActive = true;
@@ -994,16 +1015,35 @@ async function loadSettings() {
       voiceAccess: typeof parsedSettings.voiceAccess === 'boolean' ? parsedSettings.voiceAccess : DEFAULT_SETTINGS.voiceAccess,
       rememberWindowState: typeof parsedSettings.rememberWindowState === 'boolean' ? parsedSettings.rememberWindowState : DEFAULT_SETTINGS.rememberWindowState,
       windowBounds: normalizeWindowBounds(parsedSettings.windowBounds),
+      joplin: { ...normalizeJoplinSettings(parsedSettings.joplin), token: '' },
       exportPreferences: normalizeExportPreferences(parsedSettings.exportPreferences)
     };
+    try {
+      settings.joplin.token = joplinTokenStore.read(parsedSettings.joplin);
+    } catch (error) {
+      joplinTokenError = error.message;
+    }
+    if (typeof parsedSettings.joplin?.token === 'string') {
+      // Remove the legacy plaintext field, including when encryption is unavailable.
+      try {
+        await saveSettings();
+      } catch (error) {
+        settings.joplin.token = '';
+        joplinTokenError = error.message;
+        try { await saveSettings(); }
+        catch { joplinTokenError += ' The old settings file could not be rewritten; remove its plaintext token manually.'; }
+      }
+    }
   } catch (error) {
     settings = { ...DEFAULT_SETTINGS };
   }
 }
 
 async function saveSettings() {
+  const storedJoplin = joplinTokenStore.serialize(settings.joplin);
   await mkdir(app.getPath('userData'), { recursive: true });
-  await writeFile(getSettingsPath(), `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  await writeFile(getSettingsPath(), `${JSON.stringify({ ...settings, joplin: storedJoplin }, null, 2)}\n`, 'utf8');
+  joplinTokenStore.commit(storedJoplin);
 }
 
 async function updateSetting(key, value) {
@@ -1774,6 +1814,62 @@ async function getPdfSavePath() {
 
 ipcMain.handle('get-export-preferences', () => settings.exportPreferences);
 
+function showJoplinSettings() {
+  if (joplinSettingsWindow && !joplinSettingsWindow.isDestroyed()) {
+    joplinSettingsWindow.focus();
+    return;
+  }
+  joplinSettingsWindow = new BrowserWindow({
+    width: 540, height: 640, parent: mainWindow, autoHideMenuBar: true,
+    webPreferences: { preload: join(__dirname, 'joplin-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
+  });
+  joplinSettingsWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  joplinSettingsWindow.webContents.on('will-navigate', event => event.preventDefault());
+  joplinSettingsWindow.on('closed', () => { joplinSettingsWindow = null; });
+  joplinSettingsWindow.loadFile(join(__dirname, 'joplin-settings.html'));
+}
+
+function assertJoplinSettingsSender(event) {
+  if (!joplinSettingsWindow || event.sender !== joplinSettingsWindow.webContents ||
+    event.senderFrame !== event.sender.mainFrame) throw new Error('Unauthorized settings request.');
+}
+
+ipcMain.handle('joplin-settings-get', event => {
+  assertJoplinSettingsSender(event);
+  return { url: settings.joplin.url, notebookId: settings.joplin.notebookId,
+    tokenSaved: Boolean(settings.joplin.token), tokenError: joplinTokenError };
+});
+function resolveJoplinConfig(config) {
+  return { ...normalizeJoplinSettings(config), token: config?.token?.trim() || settings.joplin.token };
+}
+ipcMain.handle('joplin-settings-notebooks', async (event, config) => {
+  assertJoplinSettingsSender(event);
+  try { return { items: await getJoplinNotebooks(resolveJoplinConfig(config)) }; }
+  catch (error) { return { error: error.message }; }
+});
+ipcMain.handle('joplin-settings-save', async (event, config) => {
+  assertJoplinSettingsSender(event);
+  try {
+    const validated = validateJoplinSettings(resolveJoplinConfig(config));
+    const previous = settings.joplin;
+    settings.joplin = validated;
+    try { await saveSettings(); } catch (error) { settings.joplin = previous; throw error; }
+    joplinTokenError = '';
+    return {};
+  } catch (error) { return { error: error.message }; }
+});
+ipcMain.handle('send-to-joplin', async (event, payload) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame ||
+    !isChatGptOrigin(event.senderFrame.url)) throw new Error('Unauthorized Joplin export request.');
+  if (typeof payload?.title !== 'string' || !payload.title.trim() ||
+    typeof payload.markdown !== 'string' || !payload.markdown.trim() || payload.markdown.length > 10000000) {
+    throw new Error('Invalid Joplin note content.');
+  }
+  if (joplinTokenError && !settings.joplin.token) throw new Error(joplinTokenError);
+  const note = await createJoplinNote(settings.joplin, payload.title, payload.markdown);
+  return { id: note.id };
+});
+
 ipcMain.handle('get-window-title', event => {
   const title = BrowserWindow.fromWebContents(event.sender)?.getTitle() || '';
   return title === 'ChatGPT-EX' ? 'ChatGPT conversation' : title.replace(/\s+-\s+ChatGPT-EX$/, '');
@@ -1916,6 +2012,7 @@ function updateApplicationMenu() {
         { label: 'Export Markdown', click: () => triggerChatGptAction('markdown') },
         { label: 'Export HTML', click: () => triggerChatGptAction('html') },
         { label: 'Export PDF', click: () => triggerChatGptAction('pdf') },
+        { label: 'Send to Joplin', click: () => triggerChatGptAction('joplin') },
         { type: 'separator' },
         { label: 'Clear Browsing Data', click: clearBrowsingData },
         { type: 'separator' },
@@ -1968,6 +2065,7 @@ function updateApplicationMenu() {
           click: () => updateSetting('rememberWindowState', !settings.rememberWindowState)
         },
         { type: 'separator' },
+        { label: 'Joplin...', click: showJoplinSettings },
         {
           label: 'Export Preferences',
           submenu: [

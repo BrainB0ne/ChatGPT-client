@@ -46,6 +46,7 @@ Exports include the currently rendered conversation. Older messages that ChatGPT
 
 ## Export Selected Messages
 
+
 Choose `File > Select Messages...` to display compact checkboxes above the rendered chat bubbles. Each selector occupies its own row and scrolls with its message without covering the text.
 
 - Selecting a user message also selects its following assistant reply. Either message can be deselected individually for answer-only or prompt-only exports.
@@ -55,6 +56,23 @@ Choose `File > Select Messages...` to display compact checkboxes above the rende
 - **Cancel** exits selection mode and restores full-conversation exports. Switching chats also clears selection.
 
 Selection is temporary and covers currently rendered messages; it does not load older conversation history. Exports capture the selected content as it exists when the export action is used.
+
+## Send to Joplin
+
+Joplin exports create a **new Markdown note** each time; existing notes are not overwritten.
+
+1. In Joplin Desktop, enable the **Web Clipper service** in its options and copy the authorization token.
+2. Open **Settings > Joplin...** in ChatGPT-EX. Enter the local service URL (usually `http://127.0.0.1:41184`) and token.
+3. Click **Test Connection / Load Notebooks**, choose a destination notebook, and click **Save**. Leave the notebook as **Joplin default** to let Joplin choose it.
+4. Choose **File > Send to Joplin**. Keep Joplin running while sending notes.
+
+The note uses the current chat title, selected messages (if selection is active), and the timestamp/role-heading export preferences. No Markdown file or save dialog is needed. A notification confirms note creation; connection or authorization errors are displayed.
+
+Only local HTTP service URLs are allowed. The API token is encrypted with Electron's `safeStorage` before it is written to `userData/settings.json`: Windows uses DPAPI, macOS uses Keychain, and Linux requires a supported system keyring. The app refuses insecure fallback storage. Existing plaintext tokens are migrated on startup; if encryption is unavailable, the plaintext token is removed and must be re-entered once secure storage is available.
+
+The saved token is never returned to either settings or ChatGPT page JavaScript. Leave the token field blank to keep an existing saved token. If the credential service is unavailable or the token cannot be decrypted (for example, after moving settings to another computer), the app asks you to re-enter it and preserves any existing encrypted value when saving unrelated preferences. OS encryption protects data at rest, not against malicious software running as your user; avoid sharing the settings file.
+
+Run `npm run test:joplin` to verify API requests against a local mock service; `npm run test:export` also checks the Joplin Markdown payload.
 
 ## Compatibility Mode
 

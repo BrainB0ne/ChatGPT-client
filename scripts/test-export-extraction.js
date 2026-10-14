@@ -139,6 +139,7 @@ app.whenReady().then(async () => {
         window.chatgptDesktop = {
           getExportPreferences: async () => ({}),
           getWindowTitle: async () => 'Test chat',
+          sendToJoplin: async value => { window.__exports.push(value.markdown); return { id: 'test-note' }; },
           saveMarkdown: async value => { window.__exports.push(value); return { canceled: false }; },
           saveHtml: async value => { window.__exports.push(value); return { canceled: false }; },
           savePdf: async value => { window.__exports.push(value); return { canceled: false }; },
@@ -156,7 +157,7 @@ app.whenReady().then(async () => {
           `);
         }
 
-        for (const action of ['markdown', 'html', 'pdf', 'print']) {
+        for (const action of ['markdown', 'html', 'pdf', 'print', 'joplin']) {
           const exported = await win.webContents.executeJavaScript(`
             new Promise(resolve => {
               const expectedCount = window.__exports.length + 1;
@@ -187,7 +188,7 @@ app.whenReady().then(async () => {
             throw new Error(`${fixture.name}: ${action} did not preserve a fenced code block.`);
           }
 
-          if (fixture.expectedCodeFence && action !== 'markdown' &&
+          if (fixture.expectedCodeFence && typeof exported !== 'string' &&
             !renderPdfMessage(exported.messages[1]).includes('<pre><code>')) {
             throw new Error(`${fixture.name}: ${action} did not render the fenced code block.`);
           }
@@ -256,7 +257,7 @@ app.whenReady().then(async () => {
           })()
         `);
 
-        for (const action of ['markdown', 'html', 'pdf', 'print']) {
+        for (const action of ['markdown', 'html', 'pdf', 'print', 'joplin']) {
           const result = await win.webContents.executeJavaScript(`
             new Promise(resolve => {
               const count = window.__exports.length;
@@ -326,7 +327,7 @@ app.whenReady().then(async () => {
       }
     }
 
-    console.log('Export extraction fixtures passed for Markdown, HTML, PDF, and print.');
+    console.log('Export extraction fixtures passed for Markdown, HTML, PDF, print, and Joplin.');
   } finally {
     win.destroy();
     app.quit();

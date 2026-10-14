@@ -14,6 +14,7 @@
     "start": "electron .",
     "dev": "electron .",
     "test:export": "electron scripts/test-export-extraction.js",
+    "test:joplin": "node scripts/test-joplin.js",
     "build:linux": "electron-builder --linux --publish never",
     "build:win": "electron-builder --win --publish never",
     "release:linux": "npm run build:linux",
@@ -33,6 +34,11 @@
       "build/icons/**",
       "main.js",
       "preload.js",
+      "joplin.js",
+      "joplin-token.js",
+      "joplin-preload.js",
+      "joplin-settings.html",
+      "joplin-settings.js",
       "package.json"
     ],
     "linux": {
