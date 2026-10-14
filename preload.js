@@ -9,6 +9,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('chatgptDesktop', {
   getExportPreferences: () => ipcRenderer.invoke('get-export-preferences'),
   getWindowTitle: () => ipcRenderer.invoke('get-window-title'),
+  getJoplinConfigured: () => ipcRenderer.invoke('get-joplin-configured'),
   sendToJoplin: payload => ipcRenderer.invoke('send-to-joplin', payload),
   saveMarkdown: markdown => ipcRenderer.invoke('save-markdown-export', markdown),
   saveHtml: conversation => ipcRenderer.invoke('save-html-export', conversation),

@@ -64,9 +64,9 @@ Joplin exports create a **new Markdown note** each time; existing notes are not 
 1. In Joplin Desktop, enable the **Web Clipper service** in its options and copy the authorization token.
 2. Open **Settings > Joplin...** in ChatGPT-EX. Enter the local service URL (usually `http://127.0.0.1:41184`) and token.
 3. Click **Test Connection / Load Notebooks**, choose a destination notebook, and click **Save**. Leave the notebook as **Joplin default** to let Joplin choose it.
-4. Choose **File > Send to Joplin**. Keep Joplin running while sending notes.
+4. Choose **File > Send to Joplin** or the floating **Send to Joplin** button directly below Print. Keep Joplin running while sending notes.
 
-**Send to Joplin** is disabled until a valid local service URL and usable API token are saved. The menu updates when you save Joplin settings.
+**Send to Joplin** is disabled in both the menu and floating action bar until a valid local service URL and usable API token are saved. Both update when you save Joplin settings.
 
 The note uses the current chat title, selected messages (if selection is active), and the timestamp/role-heading export preferences. No Markdown file or save dialog is needed. A notification confirms note creation; connection or authorization errors are displayed.
 

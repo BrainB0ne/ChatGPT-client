@@ -74,6 +74,7 @@ const ACTION_BUTTON_ICONS = {
   html: readFileSync(join(__dirname, 'build', 'icons', 'file-type-html.svg'), 'utf8'),
   pdf: readFileSync(join(__dirname, 'build', 'icons', 'file-type-pdf.svg'), 'utf8'),
   print: readFileSync(join(__dirname, 'build', 'icons', 'printer.svg'), 'utf8'),
+  joplin: readFileSync(join(__dirname, 'build', 'icons', 'file-arrow-right.svg'), 'utf8'),
   reload: readFileSync(join(__dirname, 'build', 'icons', 'reload.svg'), 'utf8')
 };
 
@@ -85,6 +86,7 @@ const ACTION_BUTTONS_SCRIPT = `
     html: '__HTML_ICON__',
     pdf: '__PDF_ICON__',
     print: '__PRINT_ICON__',
+    joplin: '__JOPLIN_ICON__',
     reload: '__RELOAD_ICON__'
   };
 
@@ -849,7 +851,39 @@ const ACTION_BUTTONS_SCRIPT = `
 
   const actions = document.createElement('div');
   actions.className = 'actions';
-  actions.append(refreshButton, printButton, exportButton, htmlButton, pdfButton);
+  const joplinButton = createButton('Send to Joplin', 'Send visible chat to Joplin', iconSvgs.joplin);
+  let joplinConfigured = false;
+  let joplinBusy = false;
+
+  function updateJoplinButton(configured) {
+    joplinConfigured = configured === true;
+    joplinButton.disabled = !joplinConfigured || joplinBusy;
+    joplinButton.style.cursor = joplinBusy ? 'progress' : joplinConfigured ? 'pointer' : 'not-allowed';
+  }
+
+  updateJoplinButton(false);
+  window.chatgptDesktop?.getJoplinConfigured?.().then(updateJoplinButton).catch(() => updateJoplinButton(false));
+  window.addEventListener('chatgpt-ex-joplin-state', event => updateJoplinButton(event.detail));
+  joplinButton.addEventListener('click', async () => {
+    if (!joplinConfigured || joplinBusy) return;
+    joplinBusy = true;
+    updateJoplinButton(joplinConfigured);
+    try {
+      const conversation = await getConversationExport();
+      const preferences = await window.chatgptDesktop.getExportPreferences();
+      await window.chatgptDesktop.sendToJoplin({
+        title: conversation.title,
+        markdown: await buildMarkdown(preferences, conversation)
+      });
+      showToast('New note created in Joplin.');
+    } catch (error) {
+      window.alert(error.message || 'Failed to send to Joplin.');
+    } finally {
+      joplinBusy = false;
+      updateJoplinButton(joplinConfigured);
+    }
+  });
+  actions.append(refreshButton, printButton, joplinButton, exportButton, htmlButton, pdfButton);
 
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -859,6 +893,7 @@ const ACTION_BUTTONS_SCRIPT = `
   const actionButtons = {
     refresh: refreshButton,
     print: printButton,
+    joplin: joplinButton,
     markdown: exportButton,
     html: htmlButton,
     pdf: pdfButton
@@ -866,21 +901,6 @@ const ACTION_BUTTONS_SCRIPT = `
 
   window.addEventListener('chatgpt-ex-action', event => {
     if (!host.isConnected) return;
-    if (event.detail === 'joplin') {
-      if (host.dataset.joplinBusy) return;
-      host.dataset.joplinBusy = 'true';
-      (async () => {
-        const conversation = await getConversationExport();
-        const preferences = await window.chatgptDesktop.getExportPreferences();
-        await window.chatgptDesktop.sendToJoplin({
-          title: conversation.title,
-          markdown: await buildMarkdown(preferences, conversation)
-        });
-        showToast('New note created in Joplin.');
-      })().catch(error => window.alert(error.message || 'Failed to send to Joplin.'))
-        .finally(() => { delete host.dataset.joplinBusy; });
-      return;
-    }
     if (event.detail === 'select-messages') {
       selectionRoute = window.location.pathname;
       selectionActive = true;
@@ -902,6 +922,7 @@ function getActionButtonsScript() {
     .replace("'__HTML_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.html))
     .replace("'__PDF_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.pdf))
     .replace("'__PRINT_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.print))
+    .replace("'__JOPLIN_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.joplin))
     .replace("'__RELOAD_ICON__'", JSON.stringify(ACTION_BUTTON_ICONS.reload));
 }
 
@@ -1813,6 +1834,7 @@ async function getPdfSavePath() {
 }
 
 ipcMain.handle('get-export-preferences', () => settings.exportPreferences);
+ipcMain.handle('get-joplin-configured', () => isJoplinConfigured());
 
 function showJoplinSettings() {
   if (joplinSettingsWindow && !joplinSettingsWindow.isDestroyed()) {
@@ -1856,6 +1878,11 @@ ipcMain.handle('joplin-settings-save', async (event, config) => {
     try { await saveSettings(); } catch (error) { settings.joplin = previous; throw error; }
     joplinTokenError = '';
     updateApplicationMenu();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript(
+        `window.dispatchEvent(new CustomEvent('chatgpt-ex-joplin-state', { detail: ${isJoplinConfigured()} }));`
+      ).catch(() => {});
+    }
     return {};
   } catch (error) { return { error: error.message }; }
 });

@@ -22,7 +22,7 @@ const renderPdfMessage = runInNewContext('(' + pdfRendererSource + ')', {
 });
 
 const actionScript = runInNewContext('`' + scriptSource[1] + '`')
-  .replace(/'__(?:MARKDOWN|HTML|PDF|PRINT|RELOAD)_ICON__'/g, JSON.stringify('<svg xmlns="http://www.w3.org/2000/svg"></svg>'));
+  .replace(/'__(?:MARKDOWN|HTML|PDF|PRINT|RELOAD|JOPLIN)_ICON__'/g, JSON.stringify('<svg xmlns="http://www.w3.org/2000/svg"></svg>'));
 const tripleTicks = String.fromCharCode(96).repeat(3);
 
 const fixtures = [
@@ -139,6 +139,7 @@ app.whenReady().then(async () => {
         window.chatgptDesktop = {
           getExportPreferences: async () => ({}),
           getWindowTitle: async () => 'Test chat',
+          getJoplinConfigured: async () => true,
           sendToJoplin: async value => { window.__exports.push(value.markdown); return { id: 'test-note' }; },
           saveMarkdown: async value => { window.__exports.push(value); return { canceled: false }; },
           saveHtml: async value => { window.__exports.push(value); return { canceled: false }; },
@@ -148,6 +149,26 @@ app.whenReady().then(async () => {
         window.__exports = [];
       `);
       await win.webContents.executeJavaScript(actionScript);
+      await win.webContents.executeJavaScript(`
+        (async () => {
+          await Promise.resolve();
+          const buttons = Array.from(window.__actionShadow.querySelector('.actions').children);
+          const joplin = buttons.find(button => button.title === 'Send to Joplin');
+          if (!joplin || buttons[2] !== joplin || buttons[1].title !== 'Print') {
+            throw new Error('Joplin action is not directly below Print.');
+          }
+          if (joplin.disabled) throw new Error('Configured Joplin action is disabled.');
+          const count = window.__exports.length;
+          window.dispatchEvent(new CustomEvent('chatgpt-ex-joplin-state', { detail: false }));
+          if (!joplin.disabled) throw new Error('Unconfigured Joplin action is enabled.');
+          joplin.click();
+          window.dispatchEvent(new CustomEvent('chatgpt-ex-action', { detail: 'joplin' }));
+          await new Promise(resolve => setTimeout(resolve, 20));
+          if (window.__exports.length !== count) throw new Error('Disabled Joplin action sent a note.');
+          window.dispatchEvent(new CustomEvent('chatgpt-ex-joplin-state', { detail: true }));
+          if (joplin.disabled) throw new Error('Joplin action did not update after configuration.');
+        })()
+      `);
 
       for (const [round, expected] of [fixture.expected, fixture.expectedAfterSwitch].filter(Boolean).entries()) {
         if (round === 1) {
